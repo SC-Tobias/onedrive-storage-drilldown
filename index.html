@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="de">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -295,43 +295,43 @@
     <section class="card">
       <h1>OneDrive Storage Drilldown</h1>
       <p>
-        Melde dich mit deinem Microsoft-Konto an. Nach dem Login kannst du die Analyse starten, damit die gewählte maximale Tiefe berücksichtigt wird.
+        Sign in with your Microsoft account. After login, you can start the analysis so that the chosen maximum depth is considered.
       </p>
       <div class="row">
-        <button id="loginBtn" type="button" class="secondary">Mit Microsoft anmelden</button>
+        <button id="loginBtn" type="button" class="secondary">Sign in with Microsoft</button>
         <div id="profileContainer" class="profile-section hidden">
           <div class="profile-info">
             <img id="profilePic" class="profile-pic" alt="" />
             <span id="profileName" class="profile-name"></span>
           </div>
-          <button id="switchAccountBtn" type="button">Konto wechseln</button>
+          <button id="switchAccountBtn" type="button">Switch Account</button>
         </div>
-        <button id="startBtn" type="button" class="hidden">Analyse starten</button>
-        <button id="configBtn" type="button" class="icon" title="Konfigurationspanel öffnen oder schließen"><span aria-hidden="true">⚙️</span> Konfiguration</button>
-        <label for="maxDepthInput" class="input-label">Max. Tiefe:</label>
-        <input id="maxDepthInput" type="number" min="1" max="20" placeholder="∞" title="Maximale Ordnertiefe (leer = unbegrenzt)" />
+        <button id="startBtn" type="button" class="hidden">Start Analysis</button>
+        <button id="configBtn" type="button" class="icon" title="Open or close configuration panel"><span aria-hidden="true">⚙️</span> Configuration</button>
+        <label for="maxDepthInput" class="input-label">Max. Depth:</label>
+        <input id="maxDepthInput" type="number" min="1" max="20" placeholder="∞" title="Maximum folder depth (empty = unlimited)" />
       </div>
       <details id="configPanel" class="config-help">
-        <summary>Web-Konfiguration</summary>
+        <summary>Web Configuration</summary>
         <div class="row">
-          <label for="clientIdInput" class="input-label">Eigene Application (Client) ID:</label>
-          <input id="clientIdInput" type="text" placeholder="Wenn leer, wird die Standard-ID verwendet" aria-describedby="clientIdHelpText" />
+          <label for="clientIdInput" class="input-label">Custom Application (Client) ID:</label>
+          <input id="clientIdInput" type="text" placeholder="If empty, the default ID will be used" aria-describedby="clientIdHelpText" />
         </div>
-        <p><strong>Benötigte API-Berechtigungen (delegated):</strong></p>
+        <p><strong>Required API Permissions (delegated):</strong></p>
         <ul>
           <li><code>User.Read</code></li>
           <li><code>Files.Read</code></li>
         </ul>
         <p id="clientIdHelpText">
-          App Registration in Azure erstellen: <strong>Supported account types: Personal Microsoft accounts only</strong>,
-          Redirect URI (Single-page application) auf diese Seite setzen, oben genannte Read-Berechtigungen hinzufügen und Consent erteilen.
+          Create App Registration in Azure: <strong>Supported account types: Personal Microsoft accounts only</strong>,
+          Set Redirect URI (Single-page application) to this page, add the mentioned Read permissions above and grant consent.
         </p>
       </details>
-      <p id="status" aria-live="polite"><span id="spinner" class="spinner hidden" aria-hidden="true"></span><span id="statusText">Warte auf Token…</span></p>
+      <p id="status" aria-live="polite"><span id="spinner" class="spinner hidden" aria-hidden="true"></span><span id="statusText">Waiting for token…</span></p>
     </section>
 
     <section id="summaryCard" class="card hidden">
-      <h2>Übersicht</h2>
+      <h2>Overview</h2>
       <div id="metrics" class="metrics"></div>
     </section>
 
@@ -352,7 +352,7 @@
     const clientIdRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
     const clientIdFormatExample = 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx';
     const clientIdFormatHint = `GUID-Format: ${clientIdFormatExample}`;
-    const invalidClientIdMessage = `Ungültige GUID. Erwartet wird ${clientIdFormatExample}.`;
+    const invalidClientIdMessage = `Invalid GUID. Expected format: ${clientIdFormatExample}.`;
     const authStateStorageKey = 'onedrive-storage-drilldown-auth-state';
     const maxDepthStorageKey = 'onedrive-storage-drilldown-max-depth';
     const clientIdOverrideStorageKey = 'onedrive-storage-drilldown-client-id-override';
@@ -456,9 +456,9 @@
 
       if (token) {
         if (!returnedState) {
-          error = 'Ungültige Login-Antwort ohne Statuswert. Bitte den Login erneut starten.';
+          error = 'Invalid login response without status value. Please restart login.';
         } else if (!isValidReturnedAuthState(returnedState, expectedState)) {
-          error = 'Ungültiger Login-Status. Bitte den Login erneut starten.';
+          error = 'Invalid login status. Please restart login.';
         }
       }
 
@@ -502,7 +502,7 @@
     function startLogin() {
       const effectiveClientId = getEffectiveClientId();
       if (!tenantId || !effectiveClientId) {
-        setStatus('Microsoft-Login ist noch nicht konfiguriert. Bitte Client-ID (in auth-config.js oder als Override) und Tenant-ID konfigurieren.');
+        setStatus('Microsoft login is not configured. Please configure Client ID (in auth-config.js or as override) and Tenant ID.');
         return;
       }
       if (!validateClientIdOverride()) {
@@ -514,11 +514,11 @@
       persistClientIdOverrideToStorage();
       const state = createAuthState();
       if (!state) {
-        setStatus('Microsoft-Login konnte nicht gestartet werden. Bitte einen aktuellen Browser verwenden oder den Token manuell einfügen.');
+        setStatus('Microsoft login could not be started. Please use a modern browser or paste token manually.');
         return;
       }
       if (!persistAuthState(state)) {
-        setStatus('Microsoft-Login konnte nicht gestartet werden, weil der Browser keinen sicheren Sitzungsspeicher bereitstellt. Bitte Browser-Einstellungen prüfen oder Token manuell einfügen.');
+        setStatus('Microsoft login could not be started because the browser does not provide secure session storage. Please check browser settings or paste token manually.');
         return;
       }
       window.location.assign(buildLoginUrl(state, effectiveClientId));
@@ -684,7 +684,7 @@
         
         loginBtn.classList.add('hidden');
         profileContainer.classList.remove('hidden');
-        profileName.textContent = userInfo.displayName || 'Benutzer';
+        profileName.textContent = userInfo.displayName || 'User';
         
         if (photoResp.ok) {
           const blob = await photoResp.blob();
@@ -698,6 +698,14 @@
         }
       } catch (error) {
         console.warn('Could not fetch user profile information:', error);
+      }
+    }
+
+    function clearAuthState() {
+      try {
+        window.sessionStorage.removeItem(authStateStorageKey);
+      } catch {
+        // Ignore unavailable storage and continue.
       }
     }
 
@@ -715,7 +723,7 @@
       startBtn.classList.add('hidden');
       summaryCard.classList.add('hidden');
       treeCard.classList.add('hidden');
-      setStatus('Bitte mit Microsoft anmelden.');
+      setStatus('Please sign in with Microsoft.');
     }
 
     function getExpandedState() {
@@ -763,8 +771,8 @@
         }
       });
       if (res.status === 429 || res.status === 503) {
-        if (retriesLeft <= 0) {
-          throw new Error(`Graph API Anfragelimit überschritten (${res.status}). Bitte einige Minuten zu warten und es erneut versuchen.`);
+       if (retriesLeft <= 0) {
+         throw new Error(`Graph API rate limit exceeded (${res.status}). Please wait a few minutes and try again.`);
         }
         const retryAfter = parseInt(res.headers.get('Retry-After') || String(DEFAULT_RETRY_AFTER_SECONDS), 10);
         // Honor up to 5 minutes of Retry-After – quota throttles (innerError.code "quota") may require longer waits.
@@ -774,8 +782,8 @@
         const isQuota = errorBody?.error?.innerError?.innerError?.code === 'quota';
         const attempt = MAX_RETRIES - retriesLeft + 1;
         const hint = isQuota
-          ? `API-Kontingent erschöpft – warte ${waitMs / 1000} s (Versuch ${attempt}/${MAX_RETRIES})…`
-          : `Graph API Drosselung – warte ${waitMs / 1000} s…`;
+         ? `API quota exhausted – waiting ${waitMs / 1000} s (attempt ${attempt}/${MAX_RETRIES})…`
+         : `Graph API throttling – waiting ${waitMs / 1000} s…`;
         setStatus(hint);
         await new Promise(resolve => setTimeout(resolve, waitMs));
         return graphGet(url, token, retriesLeft - 1);
@@ -830,7 +838,7 @@
       const now = Date.now();
       if (now - lastProgressUpdate >= 100) {
         lastProgressUpdate = now;
-        setStatus(`Analysiere:\n${path} (${counters.folders} Ordner, ${counters.files} Dateien bisher…)`);
+        setStatus(`Analyzing:\n${path} (${counters.folders} folders, ${counters.files} files so far…)`);
       }
       const childrenRaw = await listChildren(itemId, token);
       const children = [];
@@ -977,7 +985,7 @@
 
     function openInOneDrive(webUrl) {
       if (!webUrl) {
-        setStatus('Fehler: OneDrive-URL nicht verfügbar. Bitte analysieren Sie erneut.');
+        setStatus('Error: OneDrive URL not available. Please analyze again.');
         return;
       }
       window.open(webUrl, '_blank');
@@ -1003,7 +1011,7 @@
       const openBtn = document.createElement('button');
       openBtn.type = 'button';
       openBtn.className = 'inline-action';
-      openBtn.textContent = 'In OneDrive öffnen';
+      openBtn.textContent = 'Open in OneDrive';
       openBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         openInOneDrive(node.webUrl);
@@ -1021,7 +1029,7 @@
           // Folders use 📁 even when truncated – they are structurally folders, just not fully analysed.
           const icon = child.type === 'folder' ? '📁' : '📄';
           const truncatedHint = child.truncated
-            ? '<span class="truncated-note" title="Inhalt nicht analysiert – Größe laut API">(nicht weiter analysiert)</span>'
+            ? '<span class="truncated-note" title="Content not analyzed – size from API">(not further analyzed)</span>'
             : '';
           leaf.innerHTML = `
             <div class="node-title">
@@ -1036,7 +1044,7 @@
           const openBtn = document.createElement('button');
           openBtn.type = 'button';
           openBtn.className = 'inline-action';
-          openBtn.textContent = 'In OneDrive öffnen';
+          openBtn.textContent = 'Open in OneDrive';
           openBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             openInOneDrive(child.webUrl);
@@ -1047,7 +1055,7 @@
             const loadMoreBtn = document.createElement('button');
             loadMoreBtn.type = 'button';
             loadMoreBtn.className = 'inline-action';
-            loadMoreBtn.textContent = 'Mehr laden';
+            loadMoreBtn.textContent = 'Load More';
             loadMoreBtn.addEventListener('click', () => loadMoreFolder(child, loadMoreBtn));
             leaf.querySelector('.path')?.appendChild(loadMoreBtn);
           }
@@ -1069,7 +1077,7 @@
 
     async function loadAndRender(token) {
       if (!isLikelyAccessToken(token)) {
-        setStatus('Ungültiger Access Token. Bitte den Login erneut starten.');
+        setStatus('Invalid access token. Please restart login.');
         return;
       }
       activeToken = token;
@@ -1077,7 +1085,7 @@
       startBtn.disabled = true;
       lastProgressUpdate = 0;
       showSpinner();
-      setStatus('Lade OneDrive-Daten. Das kann je nach Größe etwas dauern…');
+      setStatus('Loading OneDrive data. This may take a while depending on size…');
       summaryCard.classList.add('hidden');
       treeCard.classList.add('hidden');
 
@@ -1094,11 +1102,11 @@
         currentRoot = root;
         renderSummary(root, counters);
         renderTree(root);
-        setStatus(`Analyse abgeschlossen: ${formatBytes(root.size)} in ${counters.folders} Ordnern und ${counters.files} Dateien.`);
+        setStatus(`Analysis completed: ${formatBytes(root.size)} in ${counters.folders} folders and ${counters.files} files.`);
       } catch (error) {
         currentRoot = null;
         currentCounters = null;
-        setStatus(`Fehler: ${error.message}`);
+        setStatus(`Error: ${error.message}`);
       } finally {
         hideSpinner();
         showCheckmark();
@@ -1117,7 +1125,7 @@
       loginBtn.disabled = true;
       startBtn.disabled = true;
       showSpinner();
-      setStatus(`Analysiere tiefer: ${node.path}`);
+      setStatus(`Analyzing deeper: ${node.path}`);
 
       try {
         const expandedState = getExpandedState();
@@ -1129,11 +1137,11 @@
         renderSummary(currentRoot, currentCounters);
         renderTree(currentRoot);
         restoreExpandedState(expandedState);
-        setStatus(`Bereich aktualisiert: ${node.path}`);
+        setStatus(`Area updated: ${node.path}`);
       } catch (error) {
         currentCounters.folders = countersBefore.folders;
         currentCounters.files = countersBefore.files;
-        setStatus(`Fehler beim Nachladen von ${node.path}: ${error.message}`);
+        setStatus(`Error loading more of ${node.path}: ${error.message}`);
         if (triggerBtn.isConnected) {
           triggerBtn.disabled = false;
         }
