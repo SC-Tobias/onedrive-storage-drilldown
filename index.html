@@ -177,10 +177,11 @@
     <section class="card">
       <h1>OneDrive Storage Drilldown</h1>
       <p>
-        Melde dich mit deinem Microsoft-Konto an. Nach dem Login wird die OneDrive-Struktur automatisch analysiert und als Drilldown angezeigt.
+        Melde dich mit deinem Microsoft-Konto an. Nach dem Login kannst du die Analyse starten, damit die gewählte maximale Tiefe berücksichtigt wird.
       </p>
       <div class="row">
         <button id="loginBtn" type="button" class="secondary">Mit Microsoft anmelden</button>
+        <button id="startBtn" type="button" class="hidden">Analyse starten</button>
         <label for="maxDepthInput" class="input-label">Max. Tiefe:</label>
         <input id="maxDepthInput" type="number" min="1" max="20" placeholder="∞" title="Maximale Ordnertiefe (leer = unbegrenzt)" />
       </div>
@@ -207,6 +208,7 @@
     const authEndpoint = `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/authorize`;
     const authScopes = ['https://graph.microsoft.com/Files.Read', 'https://graph.microsoft.com/User.Read'];
     const authStateStorageKey = 'onedrive-storage-drilldown-auth-state';
+    const maxDepthStorageKey = 'onedrive-storage-drilldown-max-depth';
     const authParamNames = [
       'access_token',
       'token',
@@ -222,6 +224,7 @@
     const statusTextEl = document.getElementById('statusText');
     const spinnerEl = document.getElementById('spinner');
     const loginBtn = document.getElementById('loginBtn');
+    const startBtn = document.getElementById('startBtn');
     const summaryCard = document.getElementById('summaryCard');
     const treeCard = document.getElementById('treeCard');
     const metricsEl = document.getElementById('metrics');
@@ -232,6 +235,8 @@
     const concurrencyLimit = 3;
     const MAX_RETRIES = 7;
     const DEFAULT_RETRY_AFTER_SECONDS = 15;
+
+    restoreMaxDepthFromStorage();
 
     const authState = extractAuthStateFromUrl();
     if (authState.cleanedUrl) {
@@ -246,13 +251,15 @@
       console.warn('Microsoft login is not configured: missing clientId or tenantId in auth-config.js');
       setStatus('Microsoft-Login ist noch nicht konfiguriert. Bitte Client-ID und Tenant-ID prüfen.');
     } else if (activeToken) {
-      setStatus('Token aus Redirect URL erkannt. Starte Analyse…');
-      loadAndRender(activeToken);
+      setStatus('Token aus Redirect URL erkannt. Klicke auf „Analyse starten“.');
+      startBtn.classList.remove('hidden');
     } else {
       setStatus('Bitte mit Microsoft anmelden.');
     }
 
     loginBtn.addEventListener('click', startLogin);
+    startBtn.addEventListener('click', () => loadAndRender(activeToken));
+    maxDepthInput.addEventListener('change', persistMaxDepthToStorage);
 
     function extractAuthStateFromUrl() {
       const url = new URL(window.location.href);
@@ -319,6 +326,7 @@
         setStatus('Microsoft-Login ist noch nicht konfiguriert. Bitte Client-ID und Tenant-ID prüfen.');
         return;
       }
+      persistMaxDepthToStorage();
       const state = createAuthState();
       if (!state) {
         setStatus('Microsoft-Login konnte nicht gestartet werden. Bitte einen aktuellen Browser verwenden oder den Token manuell einfügen.');
@@ -357,6 +365,33 @@
         return Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
       }
       return '';
+    }
+
+    function persistMaxDepthToStorage() {
+      try {
+        const depthValue = maxDepthInput.value.trim();
+        if (!depthValue) {
+          window.sessionStorage.removeItem(maxDepthStorageKey);
+          return;
+        }
+        window.sessionStorage.setItem(maxDepthStorageKey, depthValue);
+      } catch {
+        // Ignore unavailable storage and continue.
+      }
+    }
+
+    function restoreMaxDepthFromStorage() {
+      try {
+        const storedValue = window.sessionStorage.getItem(maxDepthStorageKey) || '';
+        const depth = parseInt(storedValue, 10);
+        if (Number.isInteger(depth) && depth >= 1 && depth <= 20) {
+          maxDepthInput.value = String(depth);
+        } else if (storedValue) {
+          window.sessionStorage.removeItem(maxDepthStorageKey);
+        }
+      } catch {
+        // Ignore unavailable storage and continue.
+      }
     }
 
     function persistAuthState(state) {
@@ -684,6 +719,7 @@
       }
       activeToken = token;
       loginBtn.disabled = true;
+      startBtn.disabled = true;
       lastProgressUpdate = 0;
       showSpinner();
       setStatus('Lade OneDrive-Daten. Das kann je nach Größe etwas dauern…');
@@ -691,6 +727,7 @@
       treeCard.classList.add('hidden');
 
       const maxDepthValue = parseInt(maxDepthInput.value, 10);
+      persistMaxDepthToStorage();
       // The HTML input enforces min=1 and max=20; mirror those bounds here for consistency.
       const maxDepth = Number.isInteger(maxDepthValue) && maxDepthValue >= 1 && maxDepthValue <= 20
         ? maxDepthValue
@@ -707,6 +744,7 @@
       } finally {
         hideSpinner();
         loginBtn.disabled = false;
+        startBtn.disabled = false;
       }
     }
   </script>
