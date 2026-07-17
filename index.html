@@ -386,8 +386,6 @@
         const depth = parseInt(storedValue, 10);
         if (Number.isInteger(depth) && depth >= 1 && depth <= 20) {
           maxDepthInput.value = String(depth);
-        } else if (storedValue) {
-          window.sessionStorage.removeItem(maxDepthStorageKey);
         }
       } catch {
         // Ignore unavailable storage and continue.
@@ -727,7 +725,6 @@
       treeCard.classList.add('hidden');
 
       const maxDepthValue = parseInt(maxDepthInput.value, 10);
-      persistMaxDepthToStorage();
       // The HTML input enforces min=1 and max=20; mirror those bounds here for consistency.
       const maxDepth = Number.isInteger(maxDepthValue) && maxDepthValue >= 1 && maxDepthValue <= 20
         ? maxDepthValue
