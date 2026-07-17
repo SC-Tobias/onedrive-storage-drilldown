@@ -63,6 +63,13 @@
       margin-left: 0.5rem;
     }
 
+    .inline-action {
+      font-size: 0.75rem;
+      padding: 0.2rem 0.45rem;
+      margin-left: 0.5rem;
+      vertical-align: middle;
+    }
+
     button {
       border: none;
       border-radius: 8px;
@@ -249,6 +256,8 @@
 
     let activeToken = authState.token;
     let lastProgressUpdate = 0;
+    let currentRoot = null;
+    let currentCounters = null;
     if (authState.error) {
       setStatus(`Login fehlgeschlagen: ${authState.error}`);
     } else if (!tenantId || !clientId) {
@@ -698,6 +707,14 @@
             </div>
             <div class="path">${escapeHtml(child.path)}</div>
           `;
+          if (child.type === 'folder' && child.truncated) {
+            const loadMoreBtn = document.createElement('button');
+            loadMoreBtn.type = 'button';
+            loadMoreBtn.className = 'inline-action';
+            loadMoreBtn.textContent = 'Mehr laden';
+            loadMoreBtn.addEventListener('click', () => loadMoreFolder(child, loadMoreBtn));
+            leaf.querySelector('.path')?.appendChild(loadMoreBtn);
+          }
           container.appendChild(leaf);
         }
       }
@@ -736,12 +753,46 @@
 
       try {
         const counters = { folders: 1, files: 0 };
+        currentCounters = counters;
         const root = await analyzeFolder('', 'Root', '/Root', activeToken, counters, 0, maxDepth);
+        currentRoot = root;
         renderSummary(root, counters);
         renderTree(root);
         setStatus(`Analyse abgeschlossen: ${formatBytes(root.size)} in ${counters.folders} Ordnern und ${counters.files} Dateien.`);
       } catch (error) {
+        currentRoot = null;
+        currentCounters = null;
         setStatus(`Fehler: ${error.message}`);
+      } finally {
+        hideSpinner();
+        loginBtn.disabled = false;
+        startBtn.disabled = false;
+      }
+    }
+
+    async function loadMoreFolder(node, triggerBtn) {
+      if (!node?.id || !node.truncated || !activeToken || !currentRoot || !currentCounters) {
+        return;
+      }
+      triggerBtn.disabled = true;
+      loginBtn.disabled = true;
+      startBtn.disabled = true;
+      showSpinner();
+      setStatus(`Analysiere tiefer: ${node.path}`);
+
+      try {
+        const expandedFolder = await analyzeFolder(node.id, node.name, node.path, activeToken, currentCounters, 0, Infinity);
+        node.children = expandedFolder.children;
+        node.size = expandedFolder.size;
+        node.truncated = false;
+        renderSummary(currentRoot, currentCounters);
+        renderTree(currentRoot);
+        setStatus(`Bereich aktualisiert: ${node.path}`);
+      } catch (error) {
+        setStatus(`Fehler beim Nachladen von ${node.path}: ${error.message}`);
+        if (triggerBtn.isConnected) {
+          triggerBtn.disabled = false;
+        }
       } finally {
         hideSpinner();
         loginBtn.disabled = false;
