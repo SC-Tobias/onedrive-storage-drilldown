@@ -787,9 +787,10 @@
     }
 
     async function loadMoreFolder(node, triggerBtn) {
-      if (!node?.id || !node.truncated || !activeToken || !currentRoot || !currentCounters) {
+      if (!node?.id || !node.truncated || node.loadingMore || !activeToken || !currentRoot || !currentCounters) {
         return;
       }
+      node.loadingMore = true;
       triggerBtn.disabled = true;
       loginBtn.disabled = true;
       startBtn.disabled = true;
@@ -811,6 +812,7 @@
           triggerBtn.disabled = false;
         }
       } finally {
+        node.loadingMore = false;
         hideSpinner();
         loginBtn.disabled = false;
         startBtn.disabled = false;
