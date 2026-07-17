@@ -219,7 +219,7 @@
       <div class="row">
         <button id="loginBtn" type="button" class="secondary">Mit Microsoft anmelden</button>
         <button id="startBtn" type="button" class="hidden">Analyse starten</button>
-        <button id="configBtn" type="button" class="icon" title="Konfiguration öffnen" aria-label="Konfiguration öffnen"><span aria-hidden="true">⚙️</span> Konfiguration</button>
+        <button id="configBtn" type="button" class="icon" title="Konfiguration öffnen" aria-label="Konfiguration"><span aria-hidden="true">⚙️</span> Konfiguration</button>
         <label for="maxDepthInput" class="input-label">Max. Tiefe:</label>
         <input id="maxDepthInput" type="number" min="1" max="20" placeholder="∞" title="Maximale Ordnertiefe (leer = unbegrenzt)" />
       </div>
@@ -227,7 +227,7 @@
         <summary>Web-Konfiguration</summary>
         <div class="row">
           <label for="clientIdInput" class="input-label">Eigene Application (Client) ID:</label>
-          <input id="clientIdInput" type="text" placeholder="Wenn leer, wird die Standard-ID verwendet" title="GUID-Format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" aria-describedby="clientIdHelpText" />
+          <input id="clientIdInput" type="text" placeholder="Wenn leer, wird die Standard-ID verwendet" aria-describedby="clientIdHelpText" />
         </div>
         <p><strong>Benötigte API-Berechtigungen (delegated):</strong></p>
         <ul>
@@ -262,7 +262,8 @@
     const authEndpoint = `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/authorize`;
     const authScopes = ['https://graph.microsoft.com/Files.Read', 'https://graph.microsoft.com/User.Read'];
     const clientIdRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
-    const invalidClientIdMessage = 'Ungültige GUID. Erwartet wird xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx.';
+    const clientIdFormatHint = 'GUID-Format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx';
+    const invalidClientIdMessage = `Ungültige GUID. Erwartet wird ${clientIdFormatHint.replace('GUID-Format: ', '')}.`;
     const authStateStorageKey = 'onedrive-storage-drilldown-auth-state';
     const maxDepthStorageKey = 'onedrive-storage-drilldown-max-depth';
     const clientIdOverrideStorageKey = 'onedrive-storage-drilldown-client-id-override';
@@ -296,6 +297,7 @@
     const MAX_RETRIES = 7;
     const DEFAULT_RETRY_AFTER_SECONDS = 15;
 
+    clientIdInput.title = clientIdFormatHint;
     restoreMaxDepthFromStorage();
     restoreClientIdOverrideFromStorage();
 
@@ -398,7 +400,7 @@
       const effectiveClientId = getEffectiveClientId();
       if (!validateClientIdOverride()) {
         clientIdInput.reportValidity();
-        setStatus(`Die eigene Client-ID hat ein ungültiges Format. ${invalidClientIdMessage}`);
+        setStatus(invalidClientIdMessage);
         return;
       }
       if (!tenantId || !effectiveClientId) {
