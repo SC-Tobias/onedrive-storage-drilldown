@@ -219,7 +219,7 @@
       <div class="row">
         <button id="loginBtn" type="button" class="secondary">Mit Microsoft anmelden</button>
         <button id="startBtn" type="button" class="hidden">Analyse starten</button>
-        <button id="configBtn" type="button" class="icon" title="Konfiguration öffnen"><span aria-hidden="true">⚙️</span> Konfiguration</button>
+        <button id="configBtn" type="button" class="icon" title="Konfigurationspanel öffnen oder schließen"><span aria-hidden="true">⚙️</span> Konfiguration</button>
         <label for="maxDepthInput" class="input-label">Max. Tiefe:</label>
         <input id="maxDepthInput" type="number" min="1" max="20" placeholder="∞" title="Maximale Ordnertiefe (leer = unbegrenzt)" />
       </div>
@@ -313,7 +313,7 @@
       setStatus(`Login fehlgeschlagen: ${authState.error}`);
     } else if (!tenantId || !getEffectiveClientId()) {
       console.warn('Microsoft login is not configured: missing clientId or tenantId in auth-config.js');
-      setStatus('Microsoft-Login ist noch nicht konfiguriert. Bitte Client-ID (Standard oder Override) und Tenant-ID prüfen.');
+      setStatus('Microsoft-Login ist noch nicht konfiguriert. Bitte Client-ID (in auth-config.js oder als Override) und Tenant-ID konfigurieren.');
     } else if (activeToken) {
       setStatus('Token aus Redirect URL erkannt. Klicke auf „Analyse starten“.');
       startBtn.classList.remove('hidden');
@@ -327,8 +327,6 @@
       configPanel.open = !configPanel.open;
       if (configPanel.open) {
         clientIdInput.focus();
-      } else {
-        configBtn.focus();
       }
     });
     configPanel.addEventListener('toggle', () => {
@@ -404,13 +402,13 @@
 
     function startLogin() {
       const effectiveClientId = getEffectiveClientId();
+      if (!tenantId || !effectiveClientId) {
+        setStatus('Microsoft-Login ist noch nicht konfiguriert. Bitte Client-ID (in auth-config.js oder als Override) und Tenant-ID konfigurieren.');
+        return;
+      }
       if (!validateClientIdOverride()) {
         clientIdInput.reportValidity();
         setStatus(invalidClientIdMessage);
-        return;
-      }
-      if (!tenantId || !effectiveClientId) {
-        setStatus('Microsoft-Login ist noch nicht konfiguriert. Bitte Client-ID (Standard oder Override) und Tenant-ID prüfen.');
         return;
       }
       persistMaxDepthToStorage();
