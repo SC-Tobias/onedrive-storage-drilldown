@@ -43,13 +43,24 @@
       align-items: center;
     }
 
-    input[type="password"] {
-      flex: 1;
-      min-width: 280px;
+    input[type="number"] {
+      width: 6rem;
       padding: 0.65rem;
       border-radius: 8px;
       border: 1px solid #cbd5e1;
       font-size: 0.95rem;
+    }
+
+    label.input-label {
+      font-size: 0.95rem;
+      white-space: nowrap;
+      color: #334155;
+    }
+
+    .truncated-note {
+      font-size: 0.8rem;
+      color: #94a3b8;
+      margin-left: 0.5rem;
     }
 
     button {
@@ -166,13 +177,12 @@
     <section class="card">
       <h1>OneDrive Storage Drilldown</h1>
       <p>
-        Diese Seite kann dich per Microsoft-Login zurück auf diese URL leiten, den <code>access_token</code> aus der
-        Redirect-URL lesen und anschließend die OneDrive-Struktur mit Drilldown bis auf Dateiebene anzeigen.
+        Melde dich mit deinem Microsoft-Konto an. Nach dem Login wird die OneDrive-Struktur automatisch analysiert und als Drilldown angezeigt.
       </p>
       <div class="row">
         <button id="loginBtn" type="button" class="secondary">Mit Microsoft anmelden</button>
-        <input id="tokenInput" type="password" placeholder="Falls kein Redirect-Token vorhanden ist: Access Token hier einfügen" autocomplete="off" />
-        <button id="loadBtn">Speicher analysieren</button>
+        <label for="maxDepthInput" class="input-label">Max. Tiefe:</label>
+        <input id="maxDepthInput" type="number" min="1" max="20" placeholder="∞" title="Maximale Ordnertiefe (leer = unbegrenzt)" />
       </div>
       <p id="status" aria-live="polite"><span id="spinner" class="spinner hidden" aria-hidden="true"></span><span id="statusText">Warte auf Token…</span></p>
     </section>
@@ -212,13 +222,14 @@
     const statusTextEl = document.getElementById('statusText');
     const spinnerEl = document.getElementById('spinner');
     const loginBtn = document.getElementById('loginBtn');
-    const tokenInput = document.getElementById('tokenInput');
-    const loadBtn = document.getElementById('loadBtn');
     const summaryCard = document.getElementById('summaryCard');
     const treeCard = document.getElementById('treeCard');
     const metricsEl = document.getElementById('metrics');
     const treeEl = document.getElementById('tree');
+    const maxDepthInput = document.getElementById('maxDepthInput');
     const childrenQuery = '$top=200&$select=id,name,size,folder,file';
+    // Up to 6 concurrent Graph API calls – balances speed vs. rate-limit risk for personal OneDrive.
+    const concurrencyLimit = 6;
 
     const authState = extractAuthStateFromUrl();
     if (authState.cleanedUrl) {
@@ -233,23 +244,13 @@
       console.warn('Microsoft login is not configured: missing clientId or tenantId in auth-config.js');
       setStatus('Microsoft-Login ist noch nicht konfiguriert. Bitte Client-ID und Tenant-ID prüfen.');
     } else if (activeToken) {
-      tokenInput.value = activeToken;
       setStatus('Token aus Redirect URL erkannt. Starte Analyse…');
       loadAndRender(activeToken);
     } else {
-      setStatus('Kein Redirect-Token gefunden. Bitte mit Microsoft anmelden oder Token einfügen.');
+      setStatus('Bitte mit Microsoft anmelden.');
     }
 
     loginBtn.addEventListener('click', startLogin);
-
-    loadBtn.addEventListener('click', () => {
-      const token = tokenInput.value.trim();
-      if (!token) {
-        setStatus('Bitte zuerst einen Access Token angeben.');
-        return;
-      }
-      loadAndRender(token);
-    });
 
     function extractAuthStateFromUrl() {
       const url = new URL(window.location.href);
@@ -422,12 +423,22 @@
       return `${value.toFixed(value >= 10 ? 1 : 2)} ${unit}`;
     }
 
-    async function graphGet(url, token) {
+    async function graphGet(url, token, retriesLeft = 5) {
       const res = await fetch(url, {
         headers: {
           Authorization: 'Bearer ' + token
         }
       });
+      if (res.status === 429 || res.status === 503) {
+        if (retriesLeft <= 0) {
+          throw new Error(`Graph API Anfragelimit überschritten (${res.status}). Bitte später erneut versuchen.`);
+        }
+        const retryAfter = parseInt(res.headers.get('Retry-After') || '10', 10);
+        const waitMs = (isNaN(retryAfter) ? 10 : Math.min(retryAfter, 60)) * 1000;
+        setStatus(`Graph API Drosselung – warte ${waitMs / 1000} s…`);
+        await new Promise(resolve => setTimeout(resolve, waitMs));
+        return graphGet(url, token, retriesLeft - 1);
+      }
       if (!res.ok) {
         const errorBody = await safeJson(res);
         const message = errorBody?.error?.message || `Graph request failed (${res.status})`;
@@ -459,7 +470,22 @@
       return entries;
     }
 
-    async function analyzeFolder(itemId, name, path, token, counters) {
+    async function limitedParallel(taskFns, concurrency) {
+      const results = new Array(taskFns.length);
+      let next = 0;
+
+      async function worker() {
+        while (next < taskFns.length) {
+          const idx = next++;
+          results[idx] = await taskFns[idx]();
+        }
+      }
+
+      await Promise.all(Array.from({ length: Math.min(concurrency, taskFns.length) }, worker));
+      return results;
+    }
+
+    async function analyzeFolder(itemId, name, path, token, counters, depth = 0, maxDepth = Infinity) {
       const now = Date.now();
       if (now - lastProgressUpdate >= 100) {
         lastProgressUpdate = now;
@@ -468,14 +494,28 @@
       const childrenRaw = await listChildren(itemId, token);
       const children = [];
       let folderSize = 0;
+      const subFolderTasks = [];
 
       for (const child of childrenRaw) {
         const childPath = `${path}/${child.name}`;
         if (child.folder) {
           counters.folders += 1;
-          const folder = await analyzeFolder(child.id, child.name, childPath, token, counters);
-          children.push(folder);
-          folderSize += folder.size;
+          if (depth >= maxDepth) {
+            // Use the size already provided by the Graph API – no further API calls needed.
+            const apiSize = Number(child.size || 0);
+            children.push({
+              id: child.id,
+              name: child.name,
+              path: childPath,
+              type: 'folder',
+              size: apiSize,
+              children: [],
+              truncated: true
+            });
+            folderSize += apiSize;
+          } else {
+            subFolderTasks.push({ child, childPath });
+          }
         } else {
           counters.files += 1;
           const fileSize = Number(child.size || 0);
@@ -489,6 +529,19 @@
           });
           folderSize += fileSize;
         }
+      }
+
+      // Fetch all sub-folders in parallel, respecting the concurrency limit.
+      const folderResults = await limitedParallel(
+        subFolderTasks.map(({ child, childPath }) => () =>
+          analyzeFolder(child.id, child.name, childPath, token, counters, depth + 1, maxDepth)
+        ),
+        concurrencyLimit
+      );
+
+      for (const folder of folderResults) {
+        children.push(folder);
+        folderSize += folder.size;
       }
 
       children.sort((a, b) => b.size - a.size);
@@ -585,9 +638,14 @@
         } else {
           const leaf = document.createElement('div');
           leaf.style.margin = '0.25rem 0 0.35rem 0';
+          // Folders use 📁 even when truncated – they are structurally folders, just not fully analysed.
+          const icon = child.type === 'folder' ? '📁' : '📄';
+          const truncatedHint = child.truncated
+            ? '<span class="truncated-note" title="Inhalt nicht analysiert – Größe laut API">(nicht weiter analysiert)</span>'
+            : '';
           leaf.innerHTML = `
             <div class="node-title">
-              <span>📄 ${escapeHtml(child.name)}</span>
+              <span>${icon} ${escapeHtml(child.name)}${truncatedHint}</span>
               <span class="bar"><span style="width: ${node.size > 0 ? Math.round((child.size / node.size) * 1000) / 10 : 0}%"></span></span>
               <strong>${formatBytes(child.size)}</strong>
             </div>
@@ -611,20 +669,26 @@
 
     async function loadAndRender(token) {
       if (!isLikelyAccessToken(token)) {
-        setStatus('Ungültiger Access Token. Bitte gültigen Redirect-Token verwenden.');
+        setStatus('Ungültiger Access Token. Bitte den Login erneut starten.');
         return;
       }
       activeToken = token;
-      loadBtn.disabled = true;
+      loginBtn.disabled = true;
       lastProgressUpdate = 0;
       showSpinner();
       setStatus('Lade OneDrive-Daten. Das kann je nach Größe etwas dauern…');
       summaryCard.classList.add('hidden');
       treeCard.classList.add('hidden');
 
+      const maxDepthValue = parseInt(maxDepthInput.value, 10);
+      // The HTML input enforces min=1 and max=20; mirror those bounds here for consistency.
+      const maxDepth = Number.isInteger(maxDepthValue) && maxDepthValue >= 1 && maxDepthValue <= 20
+        ? maxDepthValue
+        : Infinity;
+
       try {
         const counters = { folders: 1, files: 0 };
-        const root = await analyzeFolder('', 'Root', '/Root', activeToken, counters);
+        const root = await analyzeFolder('', 'Root', '/Root', activeToken, counters, 0, maxDepth);
         renderSummary(root, counters);
         renderTree(root);
         setStatus(`Analyse abgeschlossen: ${formatBytes(root.size)} in ${counters.folders} Ordnern und ${counters.files} Dateien.`);
@@ -632,7 +696,7 @@
         setStatus(`Fehler: ${error.message}`);
       } finally {
         hideSpinner();
-        loadBtn.disabled = false;
+        loginBtn.disabled = false;
       }
     }
   </script>
