@@ -15,3 +15,9 @@ Statische Webseite zum Analysieren der OneDrive-Belegung (TreeSize-ähnlich).
 - Größter Ordner inkl. Pfad
 - Größte Datei inkl. Pfad
 - Drilldown-Baum bis auf Dateiebene, nach Größe sortiert
+
+## GitHub Pages Deployment (Pipeline)
+
+- Workflow: `.github/workflows/deploy-pages.yml`
+- Deployment läuft automatisch bei Push auf `main` (oder manuell via `workflow_dispatch`).
+- In den Repository Settings unter **Pages** als Source **GitHub Actions** auswählen.
