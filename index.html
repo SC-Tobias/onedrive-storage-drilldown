@@ -791,6 +791,10 @@
         return;
       }
       node.loadingMore = true;
+      const countersBefore = {
+        folders: currentCounters.folders,
+        files: currentCounters.files
+      };
       triggerBtn.disabled = true;
       loginBtn.disabled = true;
       startBtn.disabled = true;
@@ -807,6 +811,8 @@
         renderTree(currentRoot);
         setStatus(`Bereich aktualisiert: ${node.path}`);
       } catch (error) {
+        currentCounters.folders = countersBefore.folders;
+        currentCounters.files = countersBefore.files;
         setStatus(`Fehler beim Nachladen von ${node.path}: ${error.message}`);
         if (triggerBtn.isConnected) {
           triggerBtn.disabled = false;
