@@ -228,8 +228,10 @@
     const treeEl = document.getElementById('tree');
     const maxDepthInput = document.getElementById('maxDepthInput');
     const childrenQuery = '$top=200&$select=id,name,size,folder,file';
-    // Up to 6 concurrent Graph API calls – balances speed vs. rate-limit risk for personal OneDrive.
-    const concurrencyLimit = 6;
+    // 3 concurrent Graph API calls – reduced to stay within personal OneDrive quota limits.
+    const concurrencyLimit = 3;
+    const MAX_RETRIES = 7;
+    const DEFAULT_RETRY_AFTER_SECONDS = 15;
 
     const authState = extractAuthStateFromUrl();
     if (authState.cleanedUrl) {
@@ -423,7 +425,7 @@
       return `${value.toFixed(value >= 10 ? 1 : 2)} ${unit}`;
     }
 
-    async function graphGet(url, token, retriesLeft = 5) {
+    async function graphGet(url, token, retriesLeft = MAX_RETRIES) {
       const res = await fetch(url, {
         headers: {
           Authorization: 'Bearer ' + token
@@ -431,11 +433,19 @@
       });
       if (res.status === 429 || res.status === 503) {
         if (retriesLeft <= 0) {
-          throw new Error(`Graph API Anfragelimit überschritten (${res.status}). Bitte später erneut versuchen.`);
+          throw new Error(`Graph API Anfragelimit überschritten (${res.status}). Bitte einige Minuten zu warten und es erneut versuchen.`);
         }
-        const retryAfter = parseInt(res.headers.get('Retry-After') || '10', 10);
-        const waitMs = (isNaN(retryAfter) ? 10 : Math.min(retryAfter, 60)) * 1000;
-        setStatus(`Graph API Drosselung – warte ${waitMs / 1000} s…`);
+        const retryAfter = parseInt(res.headers.get('Retry-After') || String(DEFAULT_RETRY_AFTER_SECONDS), 10);
+        // Honor up to 5 minutes of Retry-After – quota throttles (innerError.code "quota") may require longer waits.
+        const waitMs = (isNaN(retryAfter) ? DEFAULT_RETRY_AFTER_SECONDS : Math.min(retryAfter, 300)) * 1000;
+        // Check for quota-specific throttle to show a targeted hint.
+        const errorBody = await safeJson(res.clone());
+        const isQuota = errorBody?.error?.innerError?.innerError?.code === 'quota';
+        const attempt = MAX_RETRIES - retriesLeft + 1;
+        const hint = isQuota
+          ? `API-Kontingent erschöpft – warte ${waitMs / 1000} s (Versuch ${attempt}/${MAX_RETRIES})…`
+          : `Graph API Drosselung – warte ${waitMs / 1000} s…`;
+        setStatus(hint);
         await new Promise(resolve => setTimeout(resolve, waitMs));
         return graphGet(url, token, retriesLeft - 1);
       }
