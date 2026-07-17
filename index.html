@@ -143,6 +143,22 @@
     .hidden {
       display: none;
     }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .spinner {
+      display: inline-block;
+      width: 1em;
+      height: 1em;
+      border: 2px solid #cbd5e1;
+      border-top-color: #2563eb;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      vertical-align: middle;
+      margin-right: 0.5em;
+    }
   </style>
 </head>
 <body>
@@ -158,7 +174,7 @@
         <input id="tokenInput" type="password" placeholder="Falls kein Redirect-Token vorhanden ist: Access Token hier einfügen" autocomplete="off" />
         <button id="loadBtn">Speicher analysieren</button>
       </div>
-      <p id="status">Warte auf Token…</p>
+      <p id="status"><span id="spinner" class="spinner hidden" aria-hidden="true"></span><span id="statusText">Warte auf Token…</span></p>
     </section>
 
     <section id="summaryCard" class="card hidden">
@@ -193,7 +209,8 @@
       'scope',
       'token_type'
     ];
-    const statusEl = document.getElementById('status');
+    const statusTextEl = document.getElementById('statusText');
+    const spinnerEl = document.getElementById('spinner');
     const loginBtn = document.getElementById('loginBtn');
     const tokenInput = document.getElementById('tokenInput');
     const loadBtn = document.getElementById('loadBtn');
@@ -375,7 +392,15 @@
     }
 
     function setStatus(message) {
-      statusEl.textContent = message;
+      statusTextEl.textContent = message;
+    }
+
+    function showSpinner() {
+      spinnerEl.classList.remove('hidden');
+    }
+
+    function hideSpinner() {
+      spinnerEl.classList.add('hidden');
     }
 
     function isLikelyAccessToken(token) {
@@ -434,6 +459,7 @@
     }
 
     async function analyzeFolder(itemId, name, path, token, counters) {
+      setStatus(`Analysiere: ${path} (${counters.folders} Ordner, ${counters.files} Dateien bisher…)`);
       const childrenRaw = await listChildren(itemId, token);
       const children = [];
       let folderSize = 0;
@@ -585,6 +611,7 @@
       }
       activeToken = token;
       loadBtn.disabled = true;
+      showSpinner();
       setStatus('Lade OneDrive-Daten. Das kann je nach Größe etwas dauern…');
       summaryCard.classList.add('hidden');
       treeCard.classList.add('hidden');
@@ -598,6 +625,7 @@
       } catch (error) {
         setStatus(`Fehler: ${error.message}`);
       } finally {
+        hideSpinner();
         loadBtn.disabled = false;
       }
     }
