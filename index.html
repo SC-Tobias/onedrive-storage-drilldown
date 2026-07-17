@@ -652,6 +652,7 @@
         } else {
           const leaf = document.createElement('div');
           leaf.style.margin = '0.25rem 0 0.35rem 0';
+          // Folders use 📁 even when truncated – they are structurally folders, just not fully analysed.
           const icon = child.type === 'folder' ? '📁' : '📄';
           const truncatedHint = child.truncated
             ? '<span class="truncated-note" title="Inhalt nicht analysiert – Größe laut API">(nicht weiter analysiert)</span>'
@@ -694,7 +695,10 @@
       treeCard.classList.add('hidden');
 
       const maxDepthValue = parseInt(maxDepthInput.value, 10);
-      const maxDepth = Number.isInteger(maxDepthValue) && maxDepthValue >= 1 ? maxDepthValue : Infinity;
+      // The HTML input enforces min=1 and max=20; mirror those bounds here for consistency.
+      const maxDepth = Number.isInteger(maxDepthValue) && maxDepthValue >= 1 && maxDepthValue <= 20
+        ? maxDepthValue
+        : Infinity;
 
       try {
         const counters = { folders: 1, files: 0 };
