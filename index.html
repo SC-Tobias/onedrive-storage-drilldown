@@ -232,12 +232,15 @@
         queryParams.get('token') ||
         ''
       );
+      const expectedState = getStoredAuthState();
       let error = extractAuthError(hashParams, queryParams);
 
-      if (token && !returnedState) {
-        error = 'Ungültige Login-Antwort ohne Statuswert. Bitte den Login erneut starten.';
-      } else if (!isValidReturnedAuthState(returnedState)) {
-        error = 'Ungültiger Login-Status. Bitte den Login erneut starten.';
+      if (token) {
+        if (!returnedState) {
+          error = 'Ungültige Login-Antwort ohne Statuswert. Bitte den Login erneut starten.';
+        } else if (!isValidReturnedAuthState(returnedState, expectedState)) {
+          error = 'Ungültiger Login-Status. Bitte den Login erneut starten.';
+        }
       }
 
       const authParamNames = [
@@ -272,7 +275,7 @@
       }
 
       return {
-        token: error ? '' : token,
+        token: token && !error ? token : '',
         error,
         cleanedUrl
       };
@@ -341,16 +344,23 @@
       }
     }
 
-    function isValidReturnedAuthState(returnedState) {
+    function getStoredAuthState() {
+      try {
+        return window.sessionStorage.getItem(authStateStorageKey) || '';
+      } catch {
+        return '';
+      }
+    }
+
+    function isValidReturnedAuthState(returnedState, expectedState = getStoredAuthState()) {
       if (!returnedState) {
-        return true;
+        return !expectedState;
+      }
+      if (!expectedState) {
+        return false;
       }
 
       try {
-        const expectedState = window.sessionStorage.getItem(authStateStorageKey);
-        if (!expectedState) {
-          return false;
-        }
         window.sessionStorage.removeItem(authStateStorageKey);
         return expectedState === returnedState;
       } catch {
