@@ -219,7 +219,7 @@
       <div class="row">
         <button id="loginBtn" type="button" class="secondary">Mit Microsoft anmelden</button>
         <button id="startBtn" type="button" class="hidden">Analyse starten</button>
-        <button id="configBtn" type="button" class="icon" title="Konfiguration öffnen" aria-label="Konfiguration öffnen">⚙️</button>
+        <button id="configBtn" type="button" class="icon" title="Konfiguration öffnen" aria-label="Konfiguration öffnen">⚙️ Konfiguration</button>
         <label for="maxDepthInput" class="input-label">Max. Tiefe:</label>
         <input id="maxDepthInput" type="number" min="1" max="20" placeholder="∞" title="Maximale Ordnertiefe (leer = unbegrenzt)" />
       </div>
@@ -261,8 +261,7 @@
     const defaultClientId = authConfig.clientId || '';
     const authEndpoint = `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/authorize`;
     const authScopes = ['https://graph.microsoft.com/Files.Read', 'https://graph.microsoft.com/User.Read'];
-    const clientIdPattern = '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}';
-    const clientIdRegex = new RegExp(`^${clientIdPattern}$`);
+    const clientIdRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
     const authStateStorageKey = 'onedrive-storage-drilldown-auth-state';
     const maxDepthStorageKey = 'onedrive-storage-drilldown-max-depth';
     const clientIdOverrideStorageKey = 'onedrive-storage-drilldown-client-id-override';
@@ -296,7 +295,7 @@
     const MAX_RETRIES = 7;
     const DEFAULT_RETRY_AFTER_SECONDS = 15;
 
-    clientIdInput.pattern = clientIdPattern;
+    clientIdInput.pattern = clientIdRegex.source;
     restoreMaxDepthFromStorage();
     restoreClientIdOverrideFromStorage();
 
@@ -329,7 +328,6 @@
         configBtn.focus();
       }
     });
-    clientIdInput.addEventListener('blur', validateClientIdOverride);
     clientIdInput.addEventListener('change', () => {
       validateClientIdOverride();
       persistClientIdOverrideToStorage();
@@ -399,6 +397,7 @@
     function startLogin() {
       const effectiveClientId = getEffectiveClientId();
       if (!validateClientIdOverride()) {
+        clientIdInput.reportValidity();
         setStatus('Die eigene Client-ID hat ein ungültiges Format. Erwartet wird eine GUID wie xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx.');
         return;
       }
