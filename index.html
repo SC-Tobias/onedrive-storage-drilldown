@@ -227,14 +227,14 @@
         <summary>Web-Konfiguration</summary>
         <div class="row">
           <label for="clientIdInput" class="input-label">Eigene Application (Client) ID:</label>
-          <input id="clientIdInput" type="text" placeholder="Wenn leer, wird die Standard-ID verwendet" pattern="^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$" title="GUID-Format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" />
+          <input id="clientIdInput" type="text" placeholder="Wenn leer, wird die Standard-ID verwendet" title="GUID-Format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" aria-describedby="clientIdHelpText" />
         </div>
         <p><strong>Benötigte API-Berechtigungen (delegated):</strong></p>
         <ul>
           <li><code>User.Read</code></li>
           <li><code>Files.Read</code></li>
         </ul>
-        <p>
+        <p id="clientIdHelpText">
           App Registration in Azure erstellen: <strong>Supported account types: Personal Microsoft accounts only</strong>,
           Redirect URI (Single-page application) auf diese Seite setzen, oben genannte Read-Berechtigungen hinzufügen und Consent erteilen.
         </p>
@@ -261,6 +261,8 @@
     const defaultClientId = authConfig.clientId || '';
     const authEndpoint = `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/authorize`;
     const authScopes = ['https://graph.microsoft.com/Files.Read', 'https://graph.microsoft.com/User.Read'];
+    const clientIdPattern = '[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}';
+    const clientIdRegex = new RegExp(`^${clientIdPattern}$`);
     const authStateStorageKey = 'onedrive-storage-drilldown-auth-state';
     const maxDepthStorageKey = 'onedrive-storage-drilldown-max-depth';
     const clientIdOverrideStorageKey = 'onedrive-storage-drilldown-client-id-override';
@@ -294,6 +296,7 @@
     const MAX_RETRIES = 7;
     const DEFAULT_RETRY_AFTER_SECONDS = 15;
 
+    clientIdInput.pattern = clientIdPattern;
     restoreMaxDepthFromStorage();
     restoreClientIdOverrideFromStorage();
 
@@ -326,8 +329,11 @@
         configBtn.focus();
       }
     });
-    clientIdInput.addEventListener('input', validateClientIdOverride);
-    clientIdInput.addEventListener('change', persistClientIdOverrideToStorage);
+    clientIdInput.addEventListener('blur', validateClientIdOverride);
+    clientIdInput.addEventListener('change', () => {
+      validateClientIdOverride();
+      persistClientIdOverrideToStorage();
+    });
     maxDepthInput.addEventListener('change', persistMaxDepthToStorage);
 
     function extractAuthStateFromUrl() {
@@ -467,7 +473,7 @@
         clientIdInput.setCustomValidity('');
         return true;
       }
-      const isValid = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(value);
+      const isValid = clientIdRegex.test(value);
       clientIdInput.setCustomValidity(isValid ? '' : 'Ungültige GUID.');
       return isValid;
     }
