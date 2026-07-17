@@ -228,12 +228,7 @@
         queryParams.get('token') ||
         ''
       );
-      let error =
-        hashParams.get('error_description') ||
-        queryParams.get('error_description') ||
-        hashParams.get('error') ||
-        queryParams.get('error') ||
-        '';
+      let error = extractAuthError(hashParams, queryParams);
 
       if (!isValidReturnedAuthState(returnedState)) {
         error = 'Ungültiger Login-Status. Bitte den Login erneut starten.';
@@ -275,6 +270,15 @@
         error,
         cleanedUrl
       };
+    }
+
+    function extractAuthError(hashParams, queryParams) {
+      const errorCode = hashParams.get('error') || queryParams.get('error') || '';
+      const errorDescription = hashParams.get('error_description') || queryParams.get('error_description') || '';
+      if (errorCode && errorDescription) {
+        return `${errorCode}: ${errorDescription}`;
+      }
+      return errorCode || errorDescription || '';
     }
 
     function startLogin() {
