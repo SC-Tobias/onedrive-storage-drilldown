@@ -43,15 +43,6 @@
       align-items: center;
     }
 
-    input[type="password"] {
-      flex: 1;
-      min-width: 280px;
-      padding: 0.65rem;
-      border-radius: 8px;
-      border: 1px solid #cbd5e1;
-      font-size: 0.95rem;
-    }
-
     input[type="number"] {
       width: 6rem;
       padding: 0.65rem;
@@ -186,15 +177,12 @@
     <section class="card">
       <h1>OneDrive Storage Drilldown</h1>
       <p>
-        Diese Seite kann dich per Microsoft-Login zurück auf diese URL leiten, den <code>access_token</code> aus der
-        Redirect-URL lesen und anschließend die OneDrive-Struktur mit Drilldown bis auf Dateiebene anzeigen.
+        Melde dich mit deinem Microsoft-Konto an. Nach dem Login wird die OneDrive-Struktur automatisch analysiert und als Drilldown angezeigt.
       </p>
       <div class="row">
         <button id="loginBtn" type="button" class="secondary">Mit Microsoft anmelden</button>
-        <input id="tokenInput" type="password" placeholder="Falls kein Redirect-Token vorhanden ist: Access Token hier einfügen" autocomplete="off" />
         <label for="maxDepthInput" class="input-label">Max. Tiefe:</label>
         <input id="maxDepthInput" type="number" min="1" max="20" placeholder="∞" title="Maximale Ordnertiefe (leer = unbegrenzt)" />
-        <button id="loadBtn">Speicher analysieren</button>
       </div>
       <p id="status" aria-live="polite"><span id="spinner" class="spinner hidden" aria-hidden="true"></span><span id="statusText">Warte auf Token…</span></p>
     </section>
@@ -234,8 +222,6 @@
     const statusTextEl = document.getElementById('statusText');
     const spinnerEl = document.getElementById('spinner');
     const loginBtn = document.getElementById('loginBtn');
-    const tokenInput = document.getElementById('tokenInput');
-    const loadBtn = document.getElementById('loadBtn');
     const summaryCard = document.getElementById('summaryCard');
     const treeCard = document.getElementById('treeCard');
     const metricsEl = document.getElementById('metrics');
@@ -258,23 +244,13 @@
       console.warn('Microsoft login is not configured: missing clientId or tenantId in auth-config.js');
       setStatus('Microsoft-Login ist noch nicht konfiguriert. Bitte Client-ID und Tenant-ID prüfen.');
     } else if (activeToken) {
-      tokenInput.value = activeToken;
       setStatus('Token aus Redirect URL erkannt. Starte Analyse…');
       loadAndRender(activeToken);
     } else {
-      setStatus('Kein Redirect-Token gefunden. Bitte mit Microsoft anmelden oder Token einfügen.');
+      setStatus('Bitte mit Microsoft anmelden.');
     }
 
     loginBtn.addEventListener('click', startLogin);
-
-    loadBtn.addEventListener('click', () => {
-      const token = tokenInput.value.trim();
-      if (!token) {
-        setStatus('Bitte zuerst einen Access Token angeben.');
-        return;
-      }
-      loadAndRender(token);
-    });
 
     function extractAuthStateFromUrl() {
       const url = new URL(window.location.href);
@@ -683,11 +659,11 @@
 
     async function loadAndRender(token) {
       if (!isLikelyAccessToken(token)) {
-        setStatus('Ungültiger Access Token. Bitte gültigen Redirect-Token verwenden.');
+        setStatus('Ungültiger Access Token. Bitte den Login erneut starten.');
         return;
       }
       activeToken = token;
-      loadBtn.disabled = true;
+      loginBtn.disabled = true;
       lastProgressUpdate = 0;
       showSpinner();
       setStatus('Lade OneDrive-Daten. Das kann je nach Größe etwas dauern…');
@@ -710,7 +686,7 @@
         setStatus(`Fehler: ${error.message}`);
       } finally {
         hideSpinner();
-        loadBtn.disabled = false;
+        loginBtn.disabled = false;
       }
     }
   </script>
