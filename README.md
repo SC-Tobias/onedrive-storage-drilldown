@@ -5,8 +5,8 @@ Statische Webseite zum Analysieren der OneDrive-Belegung (TreeSize-ähnlich).
 ## Verwendung
 
 1. `index.html` lokal oder auf einem statischen Host öffnen.
-2. Microsoft OAuth so konfigurieren, dass der Redirect auf diese Seite zeigt.
-3. Die Seite liest automatisch `access_token` aus der Redirect-URL (`#access_token=...` oder `?access_token=...`).
+2. Über **Mit Microsoft anmelden** den Login für die hinterlegte Azure-App starten.
+3. Nach dem Redirect auf diese Seite liest die App automatisch den `access_token` aus der Redirect-URL (`#access_token=...` oder `?access_token=...`).
 4. Alternativ Token manuell einfügen und **Speicher analysieren** klicken.
 
 ## Ergebnis

@@ -67,6 +67,10 @@
       cursor: wait;
     }
 
+    button.secondary {
+      background: #0f172a;
+    }
+
     #status {
       font-size: 0.95rem;
       color: #334155;
@@ -146,10 +150,11 @@
     <section class="card">
       <h1>OneDrive Storage Drilldown</h1>
       <p>
-        Diese Seite liest den <code>access_token</code> aus der Redirect-URL (Hash oder Query), lädt die OneDrive-Struktur
-        und zeigt die größten Ordner/Dateien mit Drilldown bis auf Dateiebene.
+        Diese Seite kann dich per Microsoft-Login zurück auf diese URL leiten, den <code>access_token</code> aus der
+        Redirect-URL lesen und anschließend die OneDrive-Struktur mit Drilldown bis auf Dateiebene anzeigen.
       </p>
       <div class="row">
+        <button id="loginBtn" type="button" class="secondary">Mit Microsoft anmelden</button>
         <input id="tokenInput" type="password" placeholder="Falls kein Redirect-Token vorhanden ist: Access Token hier einfügen" autocomplete="off" />
         <button id="loadBtn">Speicher analysieren</button>
       </div>
@@ -169,7 +174,13 @@
 
   <script>
     const graphRoot = 'https://graph.microsoft.com/v1.0';
+    const tenantId = '68f85644-4f0d-41df-90bc-058b0b45404d';
+    const clientId = '1af33e0a-4554-4177-856a-1e06c93b920e';
+    const authEndpoint = `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/authorize`;
+    const authScopes = ['Files.Read', 'User.Read'];
+    const authStateStorageKey = 'onedrive-storage-drilldown-auth-state';
     const statusEl = document.getElementById('status');
+    const loginBtn = document.getElementById('loginBtn');
     const tokenInput = document.getElementById('tokenInput');
     const loadBtn = document.getElementById('loadBtn');
     const summaryCard = document.getElementById('summaryCard');
@@ -178,14 +189,23 @@
     const treeEl = document.getElementById('tree');
     const childrenQuery = '$top=200&$select=id,name,size,folder,file';
 
-    let activeToken = extractTokenFromUrl();
-    if (activeToken) {
+    const authState = extractAuthStateFromUrl();
+    if (authState.cleanedUrl) {
+      window.history.replaceState({}, document.title, authState.cleanedUrl);
+    }
+
+    let activeToken = authState.token;
+    if (authState.error) {
+      setStatus(`Login fehlgeschlagen: ${authState.error}`);
+    } else if (activeToken) {
       tokenInput.value = activeToken;
       setStatus('Token aus Redirect URL erkannt. Starte Analyse…');
       loadAndRender(activeToken);
     } else {
-      setStatus('Kein Redirect-Token gefunden. Bitte Token einfügen.');
+      setStatus('Kein Redirect-Token gefunden. Bitte mit Microsoft anmelden oder Token einfügen.');
     }
+
+    loginBtn.addEventListener('click', startLogin);
 
     loadBtn.addEventListener('click', () => {
       const token = tokenInput.value.trim();
@@ -196,17 +216,117 @@
       loadAndRender(token);
     });
 
-    function extractTokenFromUrl() {
+    function extractAuthStateFromUrl() {
+      const url = new URL(window.location.href);
       const hash = window.location.hash.startsWith('#') ? window.location.hash.slice(1) : window.location.hash;
       const hashParams = new URLSearchParams(hash);
-      const queryParams = new URLSearchParams(window.location.search);
-
-      return (
+      const queryParams = url.searchParams;
+      const returnedState = hashParams.get('state') || queryParams.get('state') || '';
+      const token = (
         hashParams.get('access_token') ||
         queryParams.get('access_token') ||
         queryParams.get('token') ||
         ''
       );
+      let error =
+        hashParams.get('error_description') ||
+        queryParams.get('error_description') ||
+        hashParams.get('error') ||
+        queryParams.get('error') ||
+        '';
+
+      if (!isValidReturnedAuthState(returnedState)) {
+        error = 'Ungültiger Login-Status. Bitte den Login erneut starten.';
+      }
+
+      const authParamNames = [
+        'access_token',
+        'token',
+        'error',
+        'error_description',
+        'state',
+        'session_state',
+        'expires_in',
+        'ext_expires_in',
+        'scope',
+        'token_type'
+      ];
+
+      let cleanedUrl = '';
+      let shouldCleanUrl = false;
+      for (const name of authParamNames) {
+        if (queryParams.has(name)) {
+          queryParams.delete(name);
+          shouldCleanUrl = true;
+        }
+        if (hashParams.has(name)) {
+          shouldCleanUrl = true;
+        }
+      }
+
+      if (shouldCleanUrl) {
+        url.search = queryParams.toString() ? `?${queryParams.toString()}` : '';
+        url.hash = '';
+        cleanedUrl = url.toString();
+      }
+
+      return {
+        token: error ? '' : token,
+        error,
+        cleanedUrl
+      };
+    }
+
+    function startLogin() {
+      const state = createAuthState();
+      persistAuthState(state);
+      window.location.assign(buildLoginUrl(state));
+    }
+
+    function buildLoginUrl(state) {
+      const redirectUrl = new URL(window.location.href);
+      redirectUrl.search = '';
+      redirectUrl.hash = '';
+      const params = new URLSearchParams({
+        client_id: clientId,
+        response_type: 'token',
+        redirect_uri: redirectUrl.toString(),
+        response_mode: 'fragment',
+        scope: authScopes.join(' '),
+        prompt: 'select_account',
+        state
+      });
+      return `${authEndpoint}?${params.toString()}`;
+    }
+
+    function createAuthState() {
+      if (window.crypto?.randomUUID) {
+        return window.crypto.randomUUID();
+      }
+      return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    }
+
+    function persistAuthState(state) {
+      try {
+        window.sessionStorage.setItem(authStateStorageKey, state);
+      } catch {}
+    }
+
+    function isValidReturnedAuthState(returnedState) {
+      if (!returnedState) {
+        return true;
+      }
+
+      try {
+        const expectedState = window.sessionStorage.getItem(authStateStorageKey);
+        if (!expectedState) {
+          return true;
+        }
+        window.sessionStorage.removeItem(authStateStorageKey);
+        return expectedState === returnedState;
+      } catch {
+        return true;
+      }
     }
 
     function setStatus(message) {
