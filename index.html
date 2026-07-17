@@ -219,7 +219,7 @@
       <div class="row">
         <button id="loginBtn" type="button" class="secondary">Mit Microsoft anmelden</button>
         <button id="startBtn" type="button" class="hidden">Analyse starten</button>
-        <button id="configBtn" type="button" class="icon" title="Konfiguration öffnen" aria-label="Konfiguration"><span aria-hidden="true">⚙️</span> Konfiguration</button>
+        <button id="configBtn" type="button" class="icon" title="Konfiguration öffnen"><span aria-hidden="true">⚙️</span> Konfiguration</button>
         <label for="maxDepthInput" class="input-label">Max. Tiefe:</label>
         <input id="maxDepthInput" type="number" min="1" max="20" placeholder="∞" title="Maximale Ordnertiefe (leer = unbegrenzt)" />
       </div>
@@ -262,8 +262,9 @@
     const authEndpoint = `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/authorize`;
     const authScopes = ['https://graph.microsoft.com/Files.Read', 'https://graph.microsoft.com/User.Read'];
     const clientIdRegex = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
-    const clientIdFormatHint = 'GUID-Format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx';
-    const invalidClientIdMessage = `Ungültige GUID. Erwartet wird ${clientIdFormatHint.replace('GUID-Format: ', '')}.`;
+    const clientIdFormatExample = 'xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx';
+    const clientIdFormatHint = `GUID-Format: ${clientIdFormatExample}`;
+    const invalidClientIdMessage = `Ungültige GUID. Erwartet wird ${clientIdFormatExample}.`;
     const authStateStorageKey = 'onedrive-storage-drilldown-auth-state';
     const maxDepthStorageKey = 'onedrive-storage-drilldown-max-depth';
     const clientIdOverrideStorageKey = 'onedrive-storage-drilldown-client-id-override';
@@ -327,6 +328,11 @@
       if (configPanel.open) {
         clientIdInput.focus();
       } else {
+        configBtn.focus();
+      }
+    });
+    configPanel.addEventListener('toggle', () => {
+      if (!configPanel.open) {
         configBtn.focus();
       }
     });
