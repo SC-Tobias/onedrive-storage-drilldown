@@ -172,10 +172,12 @@
     </section>
   </main>
 
+  <script src="./auth-config.js"></script>
   <script>
     const graphRoot = 'https://graph.microsoft.com/v1.0';
-    const tenantId = '68f85644-4f0d-41df-90bc-058b0b45404d';
-    const clientId = '1af33e0a-4554-4177-856a-1e06c93b920e';
+    const authConfig = window.ONE_DRIVE_AUTH_CONFIG || {};
+    const tenantId = authConfig.tenantId || '';
+    const clientId = authConfig.clientId || '';
     const authEndpoint = `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/authorize`;
     const authScopes = ['Files.Read', 'User.Read'];
     const authStateStorageKey = 'onedrive-storage-drilldown-auth-state';
@@ -197,6 +199,8 @@
     let activeToken = authState.token;
     if (authState.error) {
       setStatus(`Login fehlgeschlagen: ${authState.error}`);
+    } else if (!tenantId || !clientId) {
+      setStatus('Microsoft-Login ist noch nicht konfiguriert. Bitte Client-ID und Tenant-ID prüfen.');
     } else if (activeToken) {
       tokenInput.value = activeToken;
       setStatus('Token aus Redirect URL erkannt. Starte Analyse…');
@@ -230,7 +234,9 @@
       );
       let error = extractAuthError(hashParams, queryParams);
 
-      if (!isValidReturnedAuthState(returnedState)) {
+      if (token && !returnedState) {
+        error = 'Ungültige Login-Antwort ohne Statuswert. Bitte den Login erneut starten.';
+      } else if (!isValidReturnedAuthState(returnedState)) {
         error = 'Ungültiger Login-Status. Bitte den Login erneut starten.';
       }
 
@@ -282,9 +288,17 @@
     }
 
     function startLogin() {
+      if (!tenantId || !clientId) {
+        setStatus('Microsoft-Login ist noch nicht konfiguriert. Bitte Client-ID und Tenant-ID prüfen.');
+        return;
+      }
       const state = createAuthState();
+      if (!state) {
+        setStatus('Microsoft-Login konnte nicht gestartet werden. Bitte einen aktuellen Browser verwenden oder den Token manuell einfügen.');
+        return;
+      }
       if (!persistAuthState(state)) {
-        setStatus('Microsoft-Login konnte nicht gestartet werden, weil der Browser keinen sicheren Sitzungsspeicher bereitstellt.');
+        setStatus('Microsoft-Login konnte nicht gestartet werden, weil der Browser keinen sicheren Sitzungsspeicher bereitstellt. Bitte Browser-Einstellungen prüfen oder Token manuell einfügen.');
         return;
       }
       window.location.assign(buildLoginUrl(state));
@@ -310,7 +324,12 @@
       if (window.crypto?.randomUUID) {
         return window.crypto.randomUUID();
       }
-      return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      if (window.crypto?.getRandomValues) {
+        const bytes = new Uint8Array(16);
+        window.crypto.getRandomValues(bytes);
+        return Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
+      }
+      return '';
     }
 
     function persistAuthState(state) {
