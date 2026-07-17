@@ -174,7 +174,7 @@
         <input id="tokenInput" type="password" placeholder="Falls kein Redirect-Token vorhanden ist: Access Token hier einfügen" autocomplete="off" />
         <button id="loadBtn">Speicher analysieren</button>
       </div>
-      <p id="status"><span id="spinner" class="spinner hidden" aria-hidden="true"></span><span id="statusText">Warte auf Token…</span></p>
+      <p id="status" aria-live="polite"><span id="spinner" class="spinner hidden" aria-hidden="true"></span><span id="statusText">Warte auf Token…</span></p>
     </section>
 
     <section id="summaryCard" class="card hidden">
@@ -226,6 +226,7 @@
     }
 
     let activeToken = authState.token;
+    let lastProgressUpdate = 0;
     if (authState.error) {
       setStatus(`Login fehlgeschlagen: ${authState.error}`);
     } else if (!tenantId || !clientId) {
@@ -459,7 +460,11 @@
     }
 
     async function analyzeFolder(itemId, name, path, token, counters) {
-      setStatus(`Analysiere: ${path} (${counters.folders} Ordner, ${counters.files} Dateien bisher…)`);
+      const now = Date.now();
+      if (now - lastProgressUpdate >= 100) {
+        lastProgressUpdate = now;
+        setStatus(`Analysiere: ${path} (${counters.folders} Ordner, ${counters.files} Dateien bisher…)`);
+      }
       const childrenRaw = await listChildren(itemId, token);
       const children = [];
       let folderSize = 0;
@@ -611,6 +616,7 @@
       }
       activeToken = token;
       loadBtn.disabled = true;
+      lastProgressUpdate = 0;
       showSpinner();
       setStatus('Lade OneDrive-Daten. Das kann je nach Größe etwas dauern…');
       summaryCard.classList.add('hidden');
