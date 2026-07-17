@@ -274,8 +274,10 @@
         cleanedUrl = url.toString();
       }
 
+      const validatedToken = token && !error ? token : '';
+
       return {
-        token: token && !error ? token : '',
+        token: validatedToken,
         error,
         cleanedUrl
       };
@@ -352,17 +354,20 @@
       }
     }
 
-    function isValidReturnedAuthState(returnedState, expectedState = getStoredAuthState()) {
+    function isValidReturnedAuthState(returnedState, expectedState) {
       if (!returnedState) {
         return !expectedState;
       }
       if (!expectedState) {
         return false;
       }
+      if (expectedState !== returnedState) {
+        return false;
+      }
 
       try {
         window.sessionStorage.removeItem(authStateStorageKey);
-        return expectedState === returnedState;
+        return true;
       } catch {
         return false;
       }
