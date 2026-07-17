@@ -301,7 +301,7 @@
         <button id="loginBtn" type="button" class="secondary">Mit Microsoft anmelden</button>
         <div id="profileContainer" class="profile-section hidden">
           <div class="profile-info">
-            <img id="profilePic" class="profile-pic" alt="Profilbild" />
+            <img id="profilePic" class="profile-pic" alt="" />
             <span id="profileName" class="profile-name"></span>
           </div>
           <button id="switchAccountBtn" type="button">Konto wechseln</button>
@@ -370,6 +370,7 @@
     ];
     const DEFAULT_PROFILE_SVG = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23cbd5e1"%3E%3Cpath d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/%3E%3C/svg%3E';
     let currentProfilePicUrl = null;
+    const originalSpinnerClass = 'spinner hidden';
     const statusTextEl = document.getElementById('statusText');
     const spinnerEl = document.getElementById('spinner');
     const loginBtn = document.getElementById('loginBtn');
@@ -659,7 +660,8 @@
     }
 
     function showSpinner() {
-      spinnerEl.classList.remove('hidden');
+      spinnerEl.className = originalSpinnerClass.replace('hidden', '').trim();
+      spinnerEl.textContent = '';
     }
 
     function hideSpinner() {
@@ -717,7 +719,7 @@
     function getExpandedState() {
       const state = {};
       document.querySelectorAll('#tree details').forEach((details) => {
-        const path = details.querySelector('.path')?.textContent;
+        const path = details.dataset.path;
         if (path) {
           state[path] = details.open;
         }
@@ -727,7 +729,7 @@
 
     function restoreExpandedState(state) {
       document.querySelectorAll('#tree details').forEach((detailsElement) => {
-        const path = detailsElement.querySelector('.path')?.textContent;
+        const path = detailsElement.dataset.path;
         if (path && state[path] !== undefined) {
           detailsElement.open = state[path];
         }
@@ -973,7 +975,7 @@
 
     function openInOneDrive(webUrl) {
       if (!webUrl) {
-        setStatus('Fehler: OneDrive-URL nicht vorhanden.');
+        setStatus('Fehler: Keine OneDrive-URL verfügbar. Bitte führen Sie die Analyse erneut durch.');
         return;
       }
       window.open(webUrl, '_blank');
@@ -982,6 +984,7 @@
     function renderNode(node, totalSize, expanded = false) {
       const container = document.createElement('details');
       container.open = expanded;
+      container.dataset.path = node.path;
       const ratio = totalSize > 0 ? Math.round((node.size / totalSize) * 1000) / 10 : 0;
 
       const summary = document.createElement('summary');
