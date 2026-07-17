@@ -87,6 +87,10 @@
       color: #334155;
     }
 
+    #statusText {
+      white-space: pre-line;
+    }
+
     .metrics {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -499,7 +503,7 @@
       const now = Date.now();
       if (now - lastProgressUpdate >= 100) {
         lastProgressUpdate = now;
-        setStatus(`Analysiere: ${path} (${counters.folders} Ordner, ${counters.files} Dateien bisher…)`);
+        setStatus(`Analysiere:\n${path} (${counters.folders} Ordner, ${counters.files} Dateien bisher…)`);
       }
       const childrenRaw = await listChildren(itemId, token);
       const children = [];
