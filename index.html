@@ -410,7 +410,7 @@
     } else if (!tenantId || !getEffectiveClientId()) {
       console.warn('Microsoft login is not configured: missing clientId or tenantId in auth-config.js');
       setStatus('Microsoft-Login ist noch nicht konfiguriert. Bitte Client-ID (in auth-config.js oder als Override) und Tenant-ID konfigurieren.');
-     else if (activeToken) {
+    } else if (activeToken) {
       setStatus('Token aus Redirect URL erkannt. Klicke auf „Analyse starten“.');
       startBtn.classList.remove('hidden');
       displayUserProfile(activeToken);
