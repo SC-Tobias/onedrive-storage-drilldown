@@ -176,6 +176,7 @@
     const treeCard = document.getElementById('treeCard');
     const metricsEl = document.getElementById('metrics');
     const treeEl = document.getElementById('tree');
+    const childrenQuery = '$top=200&$select=id,name,size,folder,file';
 
     let activeToken = extractTokenFromUrl();
     if (activeToken) {
@@ -210,6 +211,10 @@
 
     function setStatus(message) {
       statusEl.textContent = message;
+    }
+
+    function isLikelyAccessToken(token) {
+      return typeof token === 'string' && token.length > 20 && !/[\s\r\n]/.test(token);
     }
 
     function formatBytes(bytes) {
@@ -250,8 +255,8 @@
 
     async function listChildren(itemId, token) {
       const base = itemId
-        ? `${graphRoot}/me/drive/items/${encodeURIComponent(itemId)}/children?$top=200&$select=id,name,size,folder,file`
-        : `${graphRoot}/me/drive/root/children?$top=200&$select=id,name,size,folder,file`;
+        ? `${graphRoot}/me/drive/items/${encodeURIComponent(itemId)}/children?${childrenQuery}`
+        : `${graphRoot}/me/drive/root/children?${childrenQuery}`;
 
       const entries = [];
       let nextUrl = base;
@@ -365,7 +370,7 @@
     function renderNode(node, totalSize, expanded = false) {
       const container = document.createElement('details');
       container.open = expanded;
-      const ratio = totalSize > 0 ? Math.max(1, Math.round((node.size / totalSize) * 100)) : 0;
+      const ratio = totalSize > 0 ? Math.round((node.size / totalSize) * 1000) / 10 : 0;
 
       const summary = document.createElement('summary');
       summary.innerHTML = `
@@ -387,7 +392,7 @@
           leaf.innerHTML = `
             <div class="node-title">
               <span>📄 ${escapeHtml(child.name)}</span>
-              <span class="bar"><span style="width: ${node.size > 0 ? Math.max(1, Math.round((child.size / node.size) * 100)) : 0}%"></span></span>
+              <span class="bar"><span style="width: ${node.size > 0 ? Math.round((child.size / node.size) * 1000) / 10 : 0}%"></span></span>
               <strong>${formatBytes(child.size)}</strong>
             </div>
             <div class="path">${escapeHtml(child.path)}</div>
@@ -409,6 +414,10 @@
     }
 
     async function loadAndRender(token) {
+      if (!isLikelyAccessToken(token)) {
+        setStatus('Ungültiger Access Token. Bitte gültigen Redirect-Token verwenden.');
+        return;
+      }
       activeToken = token;
       loadBtn.disabled = true;
       setStatus('Lade OneDrive-Daten. Das kann je nach Größe etwas dauern…');
