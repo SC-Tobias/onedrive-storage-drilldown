@@ -672,6 +672,22 @@
       treeCard.classList.remove('hidden');
     }
 
+    function recomputeFolderSizes(node) {
+      if (!node || node.type !== 'folder' || !node.children?.length) {
+        return Number(node?.size || 0);
+      }
+      let total = 0;
+      for (const child of node.children) {
+        if (child.type === 'folder' && child.children?.length) {
+          total += recomputeFolderSizes(child);
+        } else {
+          total += Number(child.size || 0);
+        }
+      }
+      node.size = total;
+      return total;
+    }
+
     function renderNode(node, totalSize, expanded = false) {
       const container = document.createElement('details');
       container.open = expanded;
@@ -785,6 +801,7 @@
         node.children = expandedFolder.children;
         node.size = expandedFolder.size;
         node.truncated = false;
+        recomputeFolderSizes(currentRoot);
         renderSummary(currentRoot, currentCounters);
         renderTree(currentRoot);
         setStatus(`Bereich aktualisiert: ${node.path}`);
