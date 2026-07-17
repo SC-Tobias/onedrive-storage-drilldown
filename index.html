@@ -692,9 +692,9 @@
        } else {
          profilePic.src = DEFAULT_PROFILE_SVG;
        }
-      } catch (error) {
+     } catch (error) {
        console.warn('Could not fetch user profile:', error);
-      }
+     }
     }
 
     function logout() {
@@ -1090,7 +1090,7 @@
         renderSummary(root, counters);
         renderTree(root);
         setStatus(`Analyse abgeschlossen: ${formatBytes(root.size)} in ${counters.folders} Ordnern und ${counters.files} Dateien.`);
-       } catch (error) {
+      } catch (error) {
         currentRoot = null;
         currentCounters = null;
         setStatus(`Fehler: ${error.message}`);
