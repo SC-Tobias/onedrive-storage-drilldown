@@ -52,6 +52,26 @@
       font-size: 0.95rem;
     }
 
+    input[type="number"] {
+      width: 6rem;
+      padding: 0.65rem;
+      border-radius: 8px;
+      border: 1px solid #cbd5e1;
+      font-size: 0.95rem;
+    }
+
+    label.input-label {
+      font-size: 0.95rem;
+      white-space: nowrap;
+      color: #334155;
+    }
+
+    .truncated-note {
+      font-size: 0.8rem;
+      color: #94a3b8;
+      margin-left: 0.5rem;
+    }
+
     button {
       border: none;
       border-radius: 8px;
@@ -172,6 +192,8 @@
       <div class="row">
         <button id="loginBtn" type="button" class="secondary">Mit Microsoft anmelden</button>
         <input id="tokenInput" type="password" placeholder="Falls kein Redirect-Token vorhanden ist: Access Token hier einfügen" autocomplete="off" />
+        <label for="maxDepthInput" class="input-label">Max. Tiefe:</label>
+        <input id="maxDepthInput" type="number" min="1" max="20" placeholder="∞" title="Maximale Ordnertiefe (leer = unbegrenzt)" />
         <button id="loadBtn">Speicher analysieren</button>
       </div>
       <p id="status" aria-live="polite"><span id="spinner" class="spinner hidden" aria-hidden="true"></span><span id="statusText">Warte auf Token…</span></p>
@@ -218,7 +240,10 @@
     const treeCard = document.getElementById('treeCard');
     const metricsEl = document.getElementById('metrics');
     const treeEl = document.getElementById('tree');
+    const maxDepthInput = document.getElementById('maxDepthInput');
     const childrenQuery = '$top=200&$select=id,name,size,folder,file';
+    // Up to 6 concurrent Graph API calls – balances speed vs. rate-limit risk for personal OneDrive.
+    const concurrencyLimit = 6;
 
     const authState = extractAuthStateFromUrl();
     if (authState.cleanedUrl) {
@@ -459,7 +484,22 @@
       return entries;
     }
 
-    async function analyzeFolder(itemId, name, path, token, counters) {
+    async function limitedParallel(taskFns, concurrency) {
+      const results = new Array(taskFns.length);
+      let next = 0;
+
+      async function worker() {
+        while (next < taskFns.length) {
+          const idx = next++;
+          results[idx] = await taskFns[idx]();
+        }
+      }
+
+      await Promise.all(Array.from({ length: Math.min(concurrency, taskFns.length) }, worker));
+      return results;
+    }
+
+    async function analyzeFolder(itemId, name, path, token, counters, depth = 0, maxDepth = Infinity) {
       const now = Date.now();
       if (now - lastProgressUpdate >= 100) {
         lastProgressUpdate = now;
@@ -468,14 +508,28 @@
       const childrenRaw = await listChildren(itemId, token);
       const children = [];
       let folderSize = 0;
+      const subFolderTasks = [];
 
       for (const child of childrenRaw) {
         const childPath = `${path}/${child.name}`;
         if (child.folder) {
           counters.folders += 1;
-          const folder = await analyzeFolder(child.id, child.name, childPath, token, counters);
-          children.push(folder);
-          folderSize += folder.size;
+          if (depth >= maxDepth) {
+            // Use the size already provided by the Graph API – no further API calls needed.
+            const apiSize = Number(child.size || 0);
+            children.push({
+              id: child.id,
+              name: child.name,
+              path: childPath,
+              type: 'folder',
+              size: apiSize,
+              children: [],
+              truncated: true
+            });
+            folderSize += apiSize;
+          } else {
+            subFolderTasks.push({ child, childPath });
+          }
         } else {
           counters.files += 1;
           const fileSize = Number(child.size || 0);
@@ -489,6 +543,19 @@
           });
           folderSize += fileSize;
         }
+      }
+
+      // Fetch all sub-folders in parallel, respecting the concurrency limit.
+      const folderResults = await limitedParallel(
+        subFolderTasks.map(({ child, childPath }) => () =>
+          analyzeFolder(child.id, child.name, childPath, token, counters, depth + 1, maxDepth)
+        ),
+        concurrencyLimit
+      );
+
+      for (const folder of folderResults) {
+        children.push(folder);
+        folderSize += folder.size;
       }
 
       children.sort((a, b) => b.size - a.size);
@@ -585,9 +652,13 @@
         } else {
           const leaf = document.createElement('div');
           leaf.style.margin = '0.25rem 0 0.35rem 0';
+          const icon = child.type === 'folder' ? '📁' : '📄';
+          const truncatedHint = child.truncated
+            ? '<span class="truncated-note" title="Inhalt nicht analysiert – Größe laut API">(nicht weiter analysiert)</span>'
+            : '';
           leaf.innerHTML = `
             <div class="node-title">
-              <span>📄 ${escapeHtml(child.name)}</span>
+              <span>${icon} ${escapeHtml(child.name)}${truncatedHint}</span>
               <span class="bar"><span style="width: ${node.size > 0 ? Math.round((child.size / node.size) * 1000) / 10 : 0}%"></span></span>
               <strong>${formatBytes(child.size)}</strong>
             </div>
@@ -622,9 +693,12 @@
       summaryCard.classList.add('hidden');
       treeCard.classList.add('hidden');
 
+      const maxDepthValue = parseInt(maxDepthInput.value, 10);
+      const maxDepth = Number.isInteger(maxDepthValue) && maxDepthValue >= 1 ? maxDepthValue : Infinity;
+
       try {
         const counters = { folders: 1, files: 0 };
-        const root = await analyzeFolder('', 'Root', '/Root', activeToken, counters);
+        const root = await analyzeFolder('', 'Root', '/Root', activeToken, counters, 0, maxDepth);
         renderSummary(root, counters);
         renderTree(root);
         setStatus(`Analyse abgeschlossen: ${formatBytes(root.size)} in ${counters.folders} Ordnern und ${counters.files} Dateien.`);
