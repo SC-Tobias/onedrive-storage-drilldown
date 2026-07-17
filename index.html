@@ -43,7 +43,8 @@
       align-items: center;
     }
 
-    input[type="number"] {
+    input[type="number"],
+    input[type="text"] {
       width: 6rem;
       padding: 0.65rem;
       border-radius: 8px;
@@ -80,6 +81,32 @@
 
     button.secondary {
       background: #0f172a;
+    }
+
+    button.icon {
+      padding: 0.65rem 0.75rem;
+      line-height: 1;
+    }
+
+    #clientIdInput {
+      width: min(100%, 30rem);
+    }
+
+    .config-help {
+      margin: 0.75rem 0 0;
+      color: #334155;
+      font-size: 0.92rem;
+    }
+
+    .config-help ul {
+      margin: 0.4rem 0 0.4rem 1.2rem;
+      padding: 0;
+    }
+
+    .config-help code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size: 0.9em;
+      word-break: break-word;
     }
 
     #status {
@@ -186,9 +213,26 @@
       <div class="row">
         <button id="loginBtn" type="button" class="secondary">Mit Microsoft anmelden</button>
         <button id="startBtn" type="button" class="hidden">Analyse starten</button>
+        <button id="configBtn" type="button" class="icon" title="Konfiguration öffnen" aria-label="Konfiguration öffnen">⚙️</button>
         <label for="maxDepthInput" class="input-label">Max. Tiefe:</label>
         <input id="maxDepthInput" type="number" min="1" max="20" placeholder="∞" title="Maximale Ordnertiefe (leer = unbegrenzt)" />
       </div>
+      <details id="configPanel" class="config-help">
+        <summary>Web-Konfiguration</summary>
+        <div class="row">
+          <label for="clientIdInput" class="input-label">Eigene Application (Client) ID:</label>
+          <input id="clientIdInput" type="text" placeholder="Wenn leer, wird die Standard-ID verwendet" />
+        </div>
+        <p><strong>Benötigte API-Berechtigungen (delegated):</strong></p>
+        <ul>
+          <li><code>User.Read</code></li>
+          <li><code>Files.Read</code></li>
+        </ul>
+        <p>
+          App Registration in Azure erstellen: <strong>Supported account types: Personal Microsoft accounts only</strong>,
+          Redirect URI (Single-page application) auf diese Seite setzen, oben genannte Read-Berechtigungen hinzufügen und Consent erteilen.
+        </p>
+      </details>
       <p id="status" aria-live="polite"><span id="spinner" class="spinner hidden" aria-hidden="true"></span><span id="statusText">Warte auf Token…</span></p>
     </section>
 
@@ -208,11 +252,12 @@
     const graphRoot = 'https://graph.microsoft.com/v1.0';
     const authConfig = window.ONE_DRIVE_AUTH_CONFIG || {};
     const tenantId = authConfig.tenantId || '';
-    const clientId = authConfig.clientId || '';
+    const defaultClientId = authConfig.clientId || '';
     const authEndpoint = `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/authorize`;
     const authScopes = ['https://graph.microsoft.com/Files.Read', 'https://graph.microsoft.com/User.Read'];
     const authStateStorageKey = 'onedrive-storage-drilldown-auth-state';
     const maxDepthStorageKey = 'onedrive-storage-drilldown-max-depth';
+    const clientIdOverrideStorageKey = 'onedrive-storage-drilldown-client-id-override';
     const authParamNames = [
       'access_token',
       'token',
@@ -229,6 +274,9 @@
     const spinnerEl = document.getElementById('spinner');
     const loginBtn = document.getElementById('loginBtn');
     const startBtn = document.getElementById('startBtn');
+    const configBtn = document.getElementById('configBtn');
+    const configPanel = document.getElementById('configPanel');
+    const clientIdInput = document.getElementById('clientIdInput');
     const summaryCard = document.getElementById('summaryCard');
     const treeCard = document.getElementById('treeCard');
     const metricsEl = document.getElementById('metrics');
@@ -241,6 +289,7 @@
     const DEFAULT_RETRY_AFTER_SECONDS = 15;
 
     restoreMaxDepthFromStorage();
+    restoreClientIdOverrideFromStorage();
 
     const authState = extractAuthStateFromUrl();
     if (authState.cleanedUrl) {
@@ -251,9 +300,9 @@
     let lastProgressUpdate = 0;
     if (authState.error) {
       setStatus(`Login fehlgeschlagen: ${authState.error}`);
-    } else if (!tenantId || !clientId) {
+    } else if (!tenantId || !getEffectiveClientId()) {
       console.warn('Microsoft login is not configured: missing clientId or tenantId in auth-config.js');
-      setStatus('Microsoft-Login ist noch nicht konfiguriert. Bitte Client-ID und Tenant-ID prüfen.');
+      setStatus('Microsoft-Login ist noch nicht konfiguriert. Bitte Client-ID (Standard oder Override) und Tenant-ID prüfen.');
     } else if (activeToken) {
       setStatus('Token aus Redirect URL erkannt. Klicke auf „Analyse starten“.');
       startBtn.classList.remove('hidden');
@@ -263,6 +312,13 @@
 
     loginBtn.addEventListener('click', startLogin);
     startBtn.addEventListener('click', () => loadAndRender(activeToken));
+    configBtn.addEventListener('click', () => {
+      configPanel.open = !configPanel.open;
+      if (configPanel.open) {
+        clientIdInput.focus();
+      }
+    });
+    clientIdInput.addEventListener('change', persistClientIdOverrideToStorage);
     maxDepthInput.addEventListener('change', persistMaxDepthToStorage);
 
     function extractAuthStateFromUrl() {
@@ -326,11 +382,13 @@
     }
 
     function startLogin() {
-      if (!tenantId || !clientId) {
-        setStatus('Microsoft-Login ist noch nicht konfiguriert. Bitte Client-ID und Tenant-ID prüfen.');
+      const effectiveClientId = getEffectiveClientId();
+      if (!tenantId || !effectiveClientId) {
+        setStatus('Microsoft-Login ist noch nicht konfiguriert. Bitte Client-ID (Standard oder Override) und Tenant-ID prüfen.');
         return;
       }
       persistMaxDepthToStorage();
+      persistClientIdOverrideToStorage();
       const state = createAuthState();
       if (!state) {
         setStatus('Microsoft-Login konnte nicht gestartet werden. Bitte einen aktuellen Browser verwenden oder den Token manuell einfügen.');
@@ -340,15 +398,15 @@
         setStatus('Microsoft-Login konnte nicht gestartet werden, weil der Browser keinen sicheren Sitzungsspeicher bereitstellt. Bitte Browser-Einstellungen prüfen oder Token manuell einfügen.');
         return;
       }
-      window.location.assign(buildLoginUrl(state));
+      window.location.assign(buildLoginUrl(state, effectiveClientId));
     }
 
-    function buildLoginUrl(state) {
+    function buildLoginUrl(state, effectiveClientId) {
       const redirectUrl = new URL(window.location.href);
       redirectUrl.search = '';
       redirectUrl.hash = '';
       const params = new URLSearchParams({
-        client_id: clientId,
+        client_id: effectiveClientId,
         response_type: 'token',
         redirect_uri: redirectUrl.toString(),
         response_mode: 'fragment',
@@ -357,6 +415,36 @@
         state
       });
       return `${authEndpoint}?${params.toString()}`;
+    }
+
+    function getEffectiveClientId() {
+      const overrideClientId = clientIdInput.value.trim();
+      if (overrideClientId) {
+        return overrideClientId;
+      }
+      return defaultClientId;
+    }
+
+    function persistClientIdOverrideToStorage() {
+      try {
+        const value = clientIdInput.value.trim();
+        if (!value) {
+          window.localStorage.removeItem(clientIdOverrideStorageKey);
+          return;
+        }
+        window.localStorage.setItem(clientIdOverrideStorageKey, value);
+      } catch {
+        // Ignore unavailable storage and continue.
+      }
+    }
+
+    function restoreClientIdOverrideFromStorage() {
+      try {
+        const storedValue = window.localStorage.getItem(clientIdOverrideStorageKey) || '';
+        clientIdInput.value = storedValue;
+      } catch {
+        // Ignore unavailable storage and continue.
+      }
     }
 
     function createAuthState() {
