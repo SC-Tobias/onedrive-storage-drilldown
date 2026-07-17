@@ -181,6 +181,18 @@
     const authEndpoint = `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/authorize`;
     const authScopes = ['https://graph.microsoft.com/Files.Read', 'https://graph.microsoft.com/User.Read'];
     const authStateStorageKey = 'onedrive-storage-drilldown-auth-state';
+    const authParamNames = [
+      'access_token',
+      'token',
+      'error',
+      'error_description',
+      'state',
+      'session_state',
+      'expires_in',
+      'ext_expires_in',
+      'scope',
+      'token_type'
+    ];
     const statusEl = document.getElementById('status');
     const loginBtn = document.getElementById('loginBtn');
     const tokenInput = document.getElementById('tokenInput');
@@ -200,6 +212,7 @@
     if (authState.error) {
       setStatus(`Login fehlgeschlagen: ${authState.error}`);
     } else if (!tenantId || !clientId) {
+      console.warn('Microsoft login is not configured: missing clientId or tenantId in auth-config.js');
       setStatus('Microsoft-Login ist noch nicht konfiguriert. Bitte Client-ID und Tenant-ID prüfen.');
     } else if (activeToken) {
       tokenInput.value = activeToken;
@@ -243,19 +256,6 @@
         }
       }
 
-      const authParamNames = [
-        'access_token',
-        'token',
-        'error',
-        'error_description',
-        'state',
-        'session_state',
-        'expires_in',
-        'ext_expires_in',
-        'scope',
-        'token_type'
-      ];
-
       let cleanedUrl = '';
       let shouldCleanUrl = false;
       for (const name of authParamNames) {
@@ -269,9 +269,10 @@
       }
 
       if (shouldCleanUrl) {
-        url.search = queryParams.toString() ? `?${queryParams.toString()}` : '';
-        url.hash = '';
-        cleanedUrl = url.toString();
+        const cleaned = new URL(window.location.href);
+        cleaned.search = queryParams.toString() ? `?${queryParams.toString()}` : '';
+        cleaned.hash = '';
+        cleanedUrl = cleaned.toString();
       }
 
       const validatedToken = token && !error ? token : '';
