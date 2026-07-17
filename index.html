@@ -179,7 +179,7 @@
     const tenantId = authConfig.tenantId || '';
     const clientId = authConfig.clientId || '';
     const authEndpoint = `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/authorize`;
-    const authScopes = ['Files.Read', 'User.Read'];
+    const authScopes = ['https://graph.microsoft.com/Files.Read', 'https://graph.microsoft.com/User.Read'];
     const authStateStorageKey = 'onedrive-storage-drilldown-auth-state';
     const statusEl = document.getElementById('status');
     const loginBtn = document.getElementById('loginBtn');
@@ -356,7 +356,7 @@
 
     function isValidReturnedAuthState(returnedState, expectedState) {
       if (!returnedState) {
-        return !expectedState;
+        return false;
       }
       if (!expectedState) {
         return false;
