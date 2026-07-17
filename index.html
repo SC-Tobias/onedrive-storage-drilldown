@@ -781,7 +781,7 @@
       setStatus(`Analysiere tiefer: ${node.path}`);
 
       try {
-        const expandedFolder = await analyzeFolder(node.id, node.name, node.path, activeToken, currentCounters, 0, Infinity);
+        const expandedFolder = await analyzeFolder(node.id, node.name, node.path, activeToken, currentCounters, 0, 1);
         node.children = expandedFolder.children;
         node.size = expandedFolder.size;
         node.truncated = false;
