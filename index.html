@@ -214,6 +214,80 @@
       vertical-align: middle;
       margin-right: 0.5em;
     }
+
+    .checkmark {
+      display: inline-block;
+      width: 1em;
+      height: 1em;
+      color: #10b981;
+      vertical-align: middle;
+      margin-right: 0.5em;
+      font-size: 1.2em;
+      line-height: 1;
+    }
+
+    .inline-action {
+      background: none;
+      border: none;
+      color: #2563eb;
+      text-decoration: underline;
+      cursor: pointer;
+      font-size: 0.9rem;
+      padding: 0.25rem 0.5rem;
+      margin-left: 0.5rem;
+    }
+
+    .inline-action:hover {
+      color: #1d4ed8;
+    }
+
+    .inline-action:disabled {
+      color: #93c5fd;
+      cursor: not-allowed;
+    }
+
+    .profile-section {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .profile-info {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .profile-pic {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      object-fit: cover;
+      background: #e2e8f0;
+    }
+
+    .profile-name {
+      font-size: 0.95rem;
+      color: #1f2937;
+      max-width: 150px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    #switchAccountBtn {
+      background: #0f172a;
+      color: white;
+      padding: 0.5rem 0.75rem;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.9rem;
+    }
+
+    #switchAccountBtn:hover {
+      background: #1e293b;
+    }
   </style>
 </head>
 <body>
@@ -225,6 +299,13 @@
       </p>
       <div class="row">
         <button id="loginBtn" type="button" class="secondary">Mit Microsoft anmelden</button>
+        <div id="profileContainer" class="profile-section hidden">
+          <div class="profile-info">
+            <img id="profilePic" class="profile-pic" alt="Profilbild" />
+            <span id="profileName" class="profile-name"></span>
+          </div>
+          <button id="switchAccountBtn" type="button">Konto wechseln</button>
+        </div>
         <button id="startBtn" type="button" class="hidden">Analyse starten</button>
         <button id="configBtn" type="button" class="icon" title="Konfigurationspanel öffnen oder schließen"><span aria-hidden="true">⚙️</span> Konfiguration</button>
         <label for="maxDepthInput" class="input-label">Max. Tiefe:</label>
@@ -299,6 +380,10 @@
     const metricsEl = document.getElementById('metrics');
     const treeEl = document.getElementById('tree');
     const maxDepthInput = document.getElementById('maxDepthInput');
+    const profileContainer = document.getElementById('profileContainer');
+    const profilePic = document.getElementById('profilePic');
+    const profileName = document.getElementById('profileName');
+    const switchAccountBtn = document.getElementById('switchAccountBtn');
     const childrenQuery = '$top=200&$select=id,name,size,folder,file';
     // 3 concurrent Graph API calls – reduced to stay within personal OneDrive quota limits.
     const concurrencyLimit = 3;
@@ -323,15 +408,17 @@
     } else if (!tenantId || !getEffectiveClientId()) {
       console.warn('Microsoft login is not configured: missing clientId or tenantId in auth-config.js');
       setStatus('Microsoft-Login ist noch nicht konfiguriert. Bitte Client-ID (in auth-config.js oder als Override) und Tenant-ID konfigurieren.');
-    } else if (activeToken) {
+     else if (activeToken) {
       setStatus('Token aus Redirect URL erkannt. Klicke auf „Analyse starten“.');
       startBtn.classList.remove('hidden');
+      displayUserProfile(activeToken);
     } else {
       setStatus('Bitte mit Microsoft anmelden.');
     }
 
     loginBtn.addEventListener('click', startLogin);
     startBtn.addEventListener('click', () => loadAndRender(activeToken));
+    switchAccountBtn.addEventListener('click', logout);
     configBtn.addEventListener('click', () => {
       configPanel.open = !configPanel.open;
       if (configPanel.open) {
@@ -577,6 +664,64 @@
       spinnerEl.classList.add('hidden');
     }
 
+    function showCheckmark() {
+      spinnerEl.className = 'checkmark hidden';
+      spinnerEl.textContent = '✓';
+      spinnerEl.classList.remove('hidden');
+    }
+
+    async function displayUserProfile(token) {
+      try {
+        const userInfo = await graphGet(`${graphRoot}/me?$select=displayName,id`, token);
+        const photoResp = await fetch(`${graphRoot}/me/photo/$value`, {
+          headers: { Authorization: 'Bearer ' + token }
+        });
+        
+        loginBtn.classList.add('hidden');
+        profileContainer.classList.remove('hidden');
+        profileName.textContent = userInfo.displayName || 'Benutzer';
+        
+        if (photoResp.ok) {
+          const blob = await photoResp.blob();
+          profilePic.src = URL.createObjectURL(blob);
+        } else {
+          profilePic.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23cbd5e1"%3E%3Cpath d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/%3E%3C/svg%3E';
+        }
+      } catch (error) {
+        console.warn('Could not fetch user profile:', error);
+      }
+    }
+
+    function logout() {
+      activeToken = null;
+      currentRoot = null;
+      currentCounters = null;
+      clearAuthState();
+      loginBtn.classList.remove('hidden');
+      profileContainer.classList.add('hidden');
+      startBtn.classList.add('hidden');
+      summaryCard.classList.add('hidden');
+      treeCard.classList.add('hidden');
+      setStatus('Bitte mit Microsoft anmelden.');
+    }
+
+    function getExpandedState() {
+      const state = {};
+      document.querySelectorAll('#tree details').forEach((details, idx) => {
+        state[idx] = details.open;
+      });
+      return state;
+    }
+
+    function restoreExpandedState(state) {
+      const details = document.querySelectorAll('#tree details');
+      details.forEach((details, idx) => {
+        if (state[idx] !== undefined) {
+          details.open = state[idx];
+        }
+      });
+    }
+
     function isLikelyAccessToken(token) {
       return typeof token === 'string' && token.length > 20 && !/[\s\r\n]/.test(token);
     }
@@ -812,6 +957,15 @@
       return total;
     }
 
+    function openInOneDrive(itemId) {
+      if (!itemId) {
+        setStatus('Fehler: Keine Item-ID vorhanden.');
+        return;
+      }
+      const url = `https://onedrive.live.com/?cid=${itemId}&action=view`;
+      window.open(url, '_blank');
+    }
+
     function renderNode(node, totalSize, expanded = false) {
       const container = document.createElement('details');
       container.open = expanded;
@@ -826,6 +980,18 @@
         </div>
         <div class="path">${escapeHtml(node.path)}</div>
       `;
+      
+      const pathDiv = summary.querySelector('.path');
+      const openBtn = document.createElement('button');
+      openBtn.type = 'button';
+      openBtn.className = 'inline-action';
+      openBtn.textContent = 'In OneDrive öffnen';
+      openBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openInOneDrive(node.id);
+      });
+      pathDiv.appendChild(openBtn);
+      
       container.appendChild(summary);
 
       for (const child of node.children || []) {
@@ -847,6 +1013,18 @@
             </div>
             <div class="path">${escapeHtml(child.path)}</div>
           `;
+          
+          const pathDiv = leaf.querySelector('.path');
+          const openBtn = document.createElement('button');
+          openBtn.type = 'button';
+          openBtn.className = 'inline-action';
+          openBtn.textContent = 'In OneDrive öffnen';
+          openBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            openInOneDrive(child.id);
+          });
+          pathDiv.appendChild(openBtn);
+          
           if (child.type === 'folder' && child.truncated) {
             const loadMoreBtn = document.createElement('button');
             loadMoreBtn.type = 'button';
@@ -899,12 +1077,13 @@
         renderSummary(root, counters);
         renderTree(root);
         setStatus(`Analyse abgeschlossen: ${formatBytes(root.size)} in ${counters.folders} Ordnern und ${counters.files} Dateien.`);
-      } catch (error) {
+       } catch (error) {
         currentRoot = null;
         currentCounters = null;
         setStatus(`Fehler: ${error.message}`);
       } finally {
         hideSpinner();
+        showCheckmark();
         loginBtn.disabled = false;
         startBtn.disabled = false;
       }
@@ -923,6 +1102,7 @@
       setStatus(`Analysiere tiefer: ${node.path}`);
 
       try {
+        const expandedState = getExpandedState();
         const expandedFolder = await analyzeFolder(node.id, node.name, node.path, activeToken, currentCounters, 0, 1);
         node.children = expandedFolder.children;
         node.size = expandedFolder.size;
@@ -930,6 +1110,7 @@
         recomputeFolderSizes(currentRoot);
         renderSummary(currentRoot, currentCounters);
         renderTree(currentRoot);
+        restoreExpandedState(expandedState);
         setStatus(`Bereich aktualisiert: ${node.path}`);
       } catch (error) {
         currentCounters.folders = countersBefore.folders;
