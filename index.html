@@ -368,6 +368,8 @@
       'scope',
       'token_type'
     ];
+    const DEFAULT_PROFILE_SVG = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23cbd5e1"%3E%3Cpath d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/%3E%3C/svg%3E';
+    let currentProfilePicUrl = null;
     const statusTextEl = document.getElementById('statusText');
     const spinnerEl = document.getElementById('spinner');
     const loginBtn = document.getElementById('loginBtn');
@@ -384,7 +386,7 @@
     const profilePic = document.getElementById('profilePic');
     const profileName = document.getElementById('profileName');
     const switchAccountBtn = document.getElementById('switchAccountBtn');
-    const childrenQuery = '$top=200&$select=id,name,size,folder,file';
+    const childrenQuery = '$top=200&$select=id,name,size,folder,file,webUrl';
     // 3 concurrent Graph API calls – reduced to stay within personal OneDrive quota limits.
     const concurrencyLimit = 3;
     const MAX_RETRIES = 7;
@@ -665,9 +667,8 @@
     }
 
     function showCheckmark() {
-      spinnerEl.className = 'checkmark hidden';
+      spinnerEl.className = 'checkmark';
       spinnerEl.textContent = '✓';
-      spinnerEl.classList.remove('hidden');
     }
 
     async function displayUserProfile(token) {
@@ -683,12 +684,16 @@
         
         if (photoResp.ok) {
           const blob = await photoResp.blob();
-          profilePic.src = URL.createObjectURL(blob);
-        } else {
-          profilePic.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="%23cbd5e1"%3E%3Cpath d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/%3E%3C/svg%3E';
-        }
+         if (currentProfilePicUrl) {
+           URL.revokeObjectURL(currentProfilePicUrl);
+         }
+         currentProfilePicUrl = URL.createObjectURL(blob);
+         profilePic.src = currentProfilePicUrl;
+       } else {
+         profilePic.src = DEFAULT_PROFILE_SVG;
+       }
       } catch (error) {
-        console.warn('Could not fetch user profile:', error);
+       console.warn('Could not fetch user profile:', error);
       }
     }
 
@@ -696,6 +701,10 @@
       activeToken = null;
       currentRoot = null;
       currentCounters = null;
+      if (currentProfilePicUrl) {
+       URL.revokeObjectURL(currentProfilePicUrl);
+       currentProfilePicUrl = null;
+      }
       clearAuthState();
       loginBtn.classList.remove('hidden');
       profileContainer.classList.add('hidden');
@@ -707,17 +716,20 @@
 
     function getExpandedState() {
       const state = {};
-      document.querySelectorAll('#tree details').forEach((details, idx) => {
-        state[idx] = details.open;
+      document.querySelectorAll('#tree details').forEach((details) => {
+        const path = details.querySelector('.path')?.textContent;
+        if (path) {
+          state[path] = details.open;
+        }
       });
       return state;
     }
 
     function restoreExpandedState(state) {
-      const details = document.querySelectorAll('#tree details');
-      details.forEach((details, idx) => {
-        if (state[idx] !== undefined) {
-          details.open = state[idx];
+      document.querySelectorAll('#tree details').forEach((detailsElement) => {
+        const path = detailsElement.querySelector('.path')?.textContent;
+        if (path && state[path] !== undefined) {
+          detailsElement.open = state[path];
         }
       });
     }
@@ -835,7 +847,8 @@
               type: 'folder',
               size: apiSize,
               children: [],
-              truncated: true
+              truncated: true,
+              webUrl: child.webUrl
             });
             folderSize += apiSize;
           } else {
@@ -850,7 +863,8 @@
             path: childPath,
             type: 'file',
             size: fileSize,
-            children: []
+            children: [],
+            webUrl: child.webUrl
           });
           folderSize += fileSize;
         }
@@ -957,13 +971,12 @@
       return total;
     }
 
-    function openInOneDrive(itemId) {
-      if (!itemId) {
-        setStatus('Fehler: Keine Item-ID vorhanden.');
+    function openInOneDrive(webUrl) {
+      if (!webUrl) {
+        setStatus('Fehler: OneDrive-URL nicht vorhanden.');
         return;
       }
-      const url = `https://onedrive.live.com/?cid=${itemId}&action=view`;
-      window.open(url, '_blank');
+      window.open(webUrl, '_blank');
     }
 
     function renderNode(node, totalSize, expanded = false) {
@@ -988,7 +1001,7 @@
       openBtn.textContent = 'In OneDrive öffnen';
       openBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        openInOneDrive(node.id);
+        openInOneDrive(node.webUrl);
       });
       pathDiv.appendChild(openBtn);
       
@@ -1021,7 +1034,7 @@
           openBtn.textContent = 'In OneDrive öffnen';
           openBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            openInOneDrive(child.id);
+            openInOneDrive(child.webUrl);
           });
           pathDiv.appendChild(openBtn);
           
