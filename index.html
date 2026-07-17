@@ -684,17 +684,17 @@
         
         if (photoResp.ok) {
           const blob = await photoResp.blob();
-         if (currentProfilePicUrl) {
-           URL.revokeObjectURL(currentProfilePicUrl);
-         }
-         currentProfilePicUrl = URL.createObjectURL(blob);
-         profilePic.src = currentProfilePicUrl;
-       } else {
-         profilePic.src = DEFAULT_PROFILE_SVG;
-       }
-     } catch (error) {
-       console.warn('Could not fetch user profile:', error);
-     }
+          if (currentProfilePicUrl) {
+            URL.revokeObjectURL(currentProfilePicUrl);
+          }
+          currentProfilePicUrl = URL.createObjectURL(blob);
+          profilePic.src = currentProfilePicUrl;
+        } else {
+          profilePic.src = DEFAULT_PROFILE_SVG;
+        }
+      } catch (error) {
+        console.warn('Could not fetch user profile:', error);
+      }
     }
 
     function logout() {
@@ -702,8 +702,8 @@
       currentRoot = null;
       currentCounters = null;
       if (currentProfilePicUrl) {
-       URL.revokeObjectURL(currentProfilePicUrl);
-       currentProfilePicUrl = null;
+        URL.revokeObjectURL(currentProfilePicUrl);
+        currentProfilePicUrl = null;
       }
       clearAuthState();
       loginBtn.classList.remove('hidden');
