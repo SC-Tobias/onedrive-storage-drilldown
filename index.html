@@ -1,0 +1,432 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>OneDrive Storage Drilldown</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    }
+
+    body {
+      margin: 0;
+      background: #f6f8fb;
+      color: #1f2937;
+    }
+
+    main {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 1.5rem;
+      display: grid;
+      gap: 1rem;
+    }
+
+    .card {
+      background: white;
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      padding: 1rem;
+      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+    }
+
+    h1, h2, h3 {
+      margin-top: 0;
+    }
+
+    .row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      align-items: center;
+    }
+
+    input[type="password"] {
+      flex: 1;
+      min-width: 280px;
+      padding: 0.65rem;
+      border-radius: 8px;
+      border: 1px solid #cbd5e1;
+      font-size: 0.95rem;
+    }
+
+    button {
+      border: none;
+      border-radius: 8px;
+      background: #2563eb;
+      color: white;
+      padding: 0.65rem 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    button:disabled {
+      background: #93c5fd;
+      cursor: wait;
+    }
+
+    #status {
+      font-size: 0.95rem;
+      color: #334155;
+    }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 0.75rem;
+    }
+
+    .metric {
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 0.75rem;
+      background: #f8fafc;
+    }
+
+    .metric strong {
+      display: block;
+      font-size: 1.1rem;
+      margin-top: 0.25rem;
+      word-break: break-word;
+    }
+
+    details {
+      margin-left: 1rem;
+      border-left: 1px solid #e5e7eb;
+      padding-left: 0.75rem;
+    }
+
+    summary {
+      cursor: pointer;
+      list-style: none;
+      margin-bottom: 0.3rem;
+    }
+
+    summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .node-title {
+      display: grid;
+      grid-template-columns: auto minmax(110px, 1fr) auto;
+      gap: 0.5rem;
+      align-items: center;
+    }
+
+    .bar {
+      width: 100%;
+      height: 8px;
+      background: #e2e8f0;
+      border-radius: 999px;
+      overflow: hidden;
+    }
+
+    .bar > span {
+      display: block;
+      height: 100%;
+      background: linear-gradient(90deg, #60a5fa, #2563eb);
+    }
+
+    .path {
+      color: #64748b;
+      font-size: 0.83rem;
+      margin-top: 0.15rem;
+      word-break: break-word;
+    }
+
+    .hidden {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="card">
+      <h1>OneDrive Storage Drilldown</h1>
+      <p>
+        Diese Seite liest den <code>access_token</code> aus der Redirect-URL (Hash oder Query), lädt die OneDrive-Struktur
+        und zeigt die größten Ordner/Dateien mit Drilldown bis auf Dateiebene.
+      </p>
+      <div class="row">
+        <input id="tokenInput" type="password" placeholder="Falls kein Redirect-Token vorhanden ist: Access Token hier einfügen" autocomplete="off" />
+        <button id="loadBtn">Speicher analysieren</button>
+      </div>
+      <p id="status">Warte auf Token…</p>
+    </section>
+
+    <section id="summaryCard" class="card hidden">
+      <h2>Übersicht</h2>
+      <div id="metrics" class="metrics"></div>
+    </section>
+
+    <section id="treeCard" class="card hidden">
+      <h2>Drilldown</h2>
+      <div id="tree"></div>
+    </section>
+  </main>
+
+  <script>
+    const graphRoot = 'https://graph.microsoft.com/v1.0';
+    const statusEl = document.getElementById('status');
+    const tokenInput = document.getElementById('tokenInput');
+    const loadBtn = document.getElementById('loadBtn');
+    const summaryCard = document.getElementById('summaryCard');
+    const treeCard = document.getElementById('treeCard');
+    const metricsEl = document.getElementById('metrics');
+    const treeEl = document.getElementById('tree');
+
+    let activeToken = extractTokenFromUrl();
+    if (activeToken) {
+      tokenInput.value = activeToken;
+      setStatus('Token aus Redirect URL erkannt. Starte Analyse…');
+      loadAndRender(activeToken);
+    } else {
+      setStatus('Kein Redirect-Token gefunden. Bitte Token einfügen.');
+    }
+
+    loadBtn.addEventListener('click', () => {
+      const token = tokenInput.value.trim();
+      if (!token) {
+        setStatus('Bitte zuerst einen Access Token angeben.');
+        return;
+      }
+      loadAndRender(token);
+    });
+
+    function extractTokenFromUrl() {
+      const hash = window.location.hash.startsWith('#') ? window.location.hash.slice(1) : window.location.hash;
+      const hashParams = new URLSearchParams(hash);
+      const queryParams = new URLSearchParams(window.location.search);
+
+      return (
+        hashParams.get('access_token') ||
+        queryParams.get('access_token') ||
+        queryParams.get('token') ||
+        ''
+      );
+    }
+
+    function setStatus(message) {
+      statusEl.textContent = message;
+    }
+
+    function formatBytes(bytes) {
+      if (!Number.isFinite(bytes) || bytes < 0) return '0 B';
+      if (bytes < 1024) return `${bytes} B`;
+      const units = ['KB', 'MB', 'GB', 'TB'];
+      let value = bytes;
+      let unit = 'B';
+      for (const nextUnit of units) {
+        value /= 1024;
+        unit = nextUnit;
+        if (value < 1024) break;
+      }
+      return `${value.toFixed(value >= 10 ? 1 : 2)} ${unit}`;
+    }
+
+    async function graphGet(url, token) {
+      const res = await fetch(url, {
+        headers: {
+          Authorization: 'Bearer ' + token
+        }
+      });
+      if (!res.ok) {
+        const errorBody = await safeJson(res);
+        const message = errorBody?.error?.message || `Graph request failed (${res.status})`;
+        throw new Error(message);
+      }
+      return res.json();
+    }
+
+    async function safeJson(res) {
+      try {
+        return await res.json();
+      } catch {
+        return null;
+      }
+    }
+
+    async function listChildren(itemId, token) {
+      const base = itemId
+        ? `${graphRoot}/me/drive/items/${encodeURIComponent(itemId)}/children?$top=200&$select=id,name,size,folder,file`
+        : `${graphRoot}/me/drive/root/children?$top=200&$select=id,name,size,folder,file`;
+
+      const entries = [];
+      let nextUrl = base;
+      while (nextUrl) {
+        const page = await graphGet(nextUrl, token);
+        entries.push(...(page.value || []));
+        nextUrl = page['@odata.nextLink'] || null;
+      }
+      return entries;
+    }
+
+    async function analyzeFolder(itemId, name, path, token, counters) {
+      const childrenRaw = await listChildren(itemId, token);
+      const children = [];
+      let folderSize = 0;
+
+      for (const child of childrenRaw) {
+        const childPath = `${path}/${child.name}`;
+        if (child.folder) {
+          counters.folders += 1;
+          const folder = await analyzeFolder(child.id, child.name, childPath, token, counters);
+          children.push(folder);
+          folderSize += folder.size;
+        } else {
+          counters.files += 1;
+          const fileSize = Number(child.size || 0);
+          children.push({
+            id: child.id,
+            name: child.name,
+            path: childPath,
+            type: 'file',
+            size: fileSize,
+            children: []
+          });
+          folderSize += fileSize;
+        }
+      }
+
+      children.sort((a, b) => b.size - a.size);
+
+      return {
+        id: itemId || 'root',
+        name,
+        path,
+        type: 'folder',
+        size: folderSize,
+        children
+      };
+    }
+
+    function findLargest(root, type) {
+      const stack = [...(root.children || [])];
+      let largest = null;
+
+      while (stack.length) {
+        const node = stack.pop();
+        if (node.type === type && (!largest || node.size > largest.size)) {
+          largest = node;
+        }
+        if (node.children?.length) {
+          stack.push(...node.children);
+        }
+      }
+
+      return largest;
+    }
+
+    function renderSummary(root, counters) {
+      const largestFolder = findLargest(root, 'folder');
+      const largestFile = findLargest(root, 'file');
+
+      metricsEl.innerHTML = '';
+      const metrics = [
+        { label: 'Gesamtspeicher', value: formatBytes(root.size) },
+        { label: 'Ordner gesamt', value: String(counters.folders) },
+        { label: 'Dateien gesamt', value: String(counters.files) },
+        {
+          label: 'Größter Ordner',
+          value: largestFolder ? `${largestFolder.name} (${formatBytes(largestFolder.size)})` : '-'
+        },
+        {
+          label: 'Pfad größter Ordner',
+          value: largestFolder ? largestFolder.path : '-'
+        },
+        {
+          label: 'Größte Datei',
+          value: largestFile ? `${largestFile.name} (${formatBytes(largestFile.size)})` : '-'
+        },
+        {
+          label: 'Pfad größte Datei',
+          value: largestFile ? largestFile.path : '-'
+        }
+      ];
+
+      for (const metric of metrics) {
+        const box = document.createElement('div');
+        box.className = 'metric';
+        box.innerHTML = `<span>${metric.label}</span><strong>${escapeHtml(metric.value)}</strong>`;
+        metricsEl.appendChild(box);
+      }
+
+      summaryCard.classList.remove('hidden');
+    }
+
+    function renderTree(root) {
+      treeEl.innerHTML = '';
+      treeEl.appendChild(renderNode(root, root.size, true));
+      treeCard.classList.remove('hidden');
+    }
+
+    function renderNode(node, totalSize, expanded = false) {
+      const container = document.createElement('details');
+      container.open = expanded;
+      const ratio = totalSize > 0 ? Math.max(1, Math.round((node.size / totalSize) * 100)) : 0;
+
+      const summary = document.createElement('summary');
+      summary.innerHTML = `
+        <div class="node-title">
+          <span>${node.type === 'folder' ? '📁' : '📄'} ${escapeHtml(node.name)}</span>
+          <span class="bar"><span style="width: ${ratio}%"></span></span>
+          <strong>${formatBytes(node.size)}</strong>
+        </div>
+        <div class="path">${escapeHtml(node.path)}</div>
+      `;
+      container.appendChild(summary);
+
+      for (const child of node.children || []) {
+        if (child.children?.length) {
+          container.appendChild(renderNode(child, node.size));
+        } else {
+          const leaf = document.createElement('div');
+          leaf.style.margin = '0.25rem 0 0.35rem 0';
+          leaf.innerHTML = `
+            <div class="node-title">
+              <span>📄 ${escapeHtml(child.name)}</span>
+              <span class="bar"><span style="width: ${node.size > 0 ? Math.max(1, Math.round((child.size / node.size) * 100)) : 0}%"></span></span>
+              <strong>${formatBytes(child.size)}</strong>
+            </div>
+            <div class="path">${escapeHtml(child.path)}</div>
+          `;
+          container.appendChild(leaf);
+        }
+      }
+
+      return container;
+    }
+
+    function escapeHtml(input) {
+      return String(input)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+    }
+
+    async function loadAndRender(token) {
+      activeToken = token;
+      loadBtn.disabled = true;
+      setStatus('Lade OneDrive-Daten. Das kann je nach Größe etwas dauern…');
+      summaryCard.classList.add('hidden');
+      treeCard.classList.add('hidden');
+
+      try {
+        const counters = { folders: 1, files: 0 };
+        const root = await analyzeFolder('', 'Root', '/Root', activeToken, counters);
+        renderSummary(root, counters);
+        renderTree(root);
+        setStatus(`Analyse abgeschlossen: ${formatBytes(root.size)} in ${counters.folders} Ordnern und ${counters.files} Dateien.`);
+      } catch (error) {
+        setStatus(`Fehler: ${error.message}`);
+      } finally {
+        loadBtn.disabled = false;
+      }
+    }
+  </script>
+</body>
+</html>
