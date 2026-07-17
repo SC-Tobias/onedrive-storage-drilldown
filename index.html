@@ -283,7 +283,10 @@
 
     function startLogin() {
       const state = createAuthState();
-      persistAuthState(state);
+      if (!persistAuthState(state)) {
+        setStatus('Microsoft-Login konnte nicht gestartet werden, weil der Browser keinen sicheren Sitzungsspeicher bereitstellt.');
+        return;
+      }
       window.location.assign(buildLoginUrl(state));
     }
 
@@ -313,7 +316,10 @@
     function persistAuthState(state) {
       try {
         window.sessionStorage.setItem(authStateStorageKey, state);
-      } catch {}
+        return true;
+      } catch {
+        return false;
+      }
     }
 
     function isValidReturnedAuthState(returnedState) {
@@ -324,12 +330,12 @@
       try {
         const expectedState = window.sessionStorage.getItem(authStateStorageKey);
         if (!expectedState) {
-          return true;
+          return false;
         }
         window.sessionStorage.removeItem(authStateStorageKey);
         return expectedState === returnedState;
       } catch {
-        return true;
+        return false;
       }
     }
 

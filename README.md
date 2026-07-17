@@ -9,6 +9,8 @@ Statische Webseite zum Analysieren der OneDrive-Belegung (TreeSize-ähnlich).
 3. Nach dem Redirect auf diese Seite liest die App automatisch den `access_token` aus der Redirect-URL (`#access_token=...` oder `?access_token=...`).
 4. Alternativ Token manuell einfügen und **Speicher analysieren** klicken.
 
+Die Seite ist für eine feste Azure-App vorkonfiguriert. Client-ID und Tenant-ID sind bei einer statischen Webseite clientseitig sichtbar; in der Azure-App sollten deshalb nur die vorgesehenen Redirect-URIs hinterlegt sein.
+
 ## Ergebnis
 
 - Übersicht mit Gesamtspeicher, Anzahl Ordner/Dateien
