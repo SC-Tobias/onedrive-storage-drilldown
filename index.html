@@ -67,6 +67,10 @@
       cursor: wait;
     }
 
+    button.secondary {
+      background: #0f172a;
+    }
+
     #status {
       font-size: 0.95rem;
       color: #334155;
@@ -146,10 +150,11 @@
     <section class="card">
       <h1>OneDrive Storage Drilldown</h1>
       <p>
-        Diese Seite liest den <code>access_token</code> aus der Redirect-URL (Hash oder Query), lädt die OneDrive-Struktur
-        und zeigt die größten Ordner/Dateien mit Drilldown bis auf Dateiebene.
+        Diese Seite kann dich per Microsoft-Login zurück auf diese URL leiten, den <code>access_token</code> aus der
+        Redirect-URL lesen und anschließend die OneDrive-Struktur mit Drilldown bis auf Dateiebene anzeigen.
       </p>
       <div class="row">
+        <button id="loginBtn" type="button" class="secondary">Mit Microsoft anmelden</button>
         <input id="tokenInput" type="password" placeholder="Falls kein Redirect-Token vorhanden ist: Access Token hier einfügen" autocomplete="off" />
         <button id="loadBtn">Speicher analysieren</button>
       </div>
@@ -167,9 +172,29 @@
     </section>
   </main>
 
+  <script src="./auth-config.js"></script>
   <script>
     const graphRoot = 'https://graph.microsoft.com/v1.0';
+    const authConfig = window.ONE_DRIVE_AUTH_CONFIG || {};
+    const tenantId = authConfig.tenantId || '';
+    const clientId = authConfig.clientId || '';
+    const authEndpoint = `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/authorize`;
+    const authScopes = ['https://graph.microsoft.com/Files.Read', 'https://graph.microsoft.com/User.Read'];
+    const authStateStorageKey = 'onedrive-storage-drilldown-auth-state';
+    const authParamNames = [
+      'access_token',
+      'token',
+      'error',
+      'error_description',
+      'state',
+      'session_state',
+      'expires_in',
+      'ext_expires_in',
+      'scope',
+      'token_type'
+    ];
     const statusEl = document.getElementById('status');
+    const loginBtn = document.getElementById('loginBtn');
     const tokenInput = document.getElementById('tokenInput');
     const loadBtn = document.getElementById('loadBtn');
     const summaryCard = document.getElementById('summaryCard');
@@ -178,14 +203,26 @@
     const treeEl = document.getElementById('tree');
     const childrenQuery = '$top=200&$select=id,name,size,folder,file';
 
-    let activeToken = extractTokenFromUrl();
-    if (activeToken) {
+    const authState = extractAuthStateFromUrl();
+    if (authState.cleanedUrl) {
+      window.history.replaceState({}, document.title, authState.cleanedUrl);
+    }
+
+    let activeToken = authState.token;
+    if (authState.error) {
+      setStatus(`Login fehlgeschlagen: ${authState.error}`);
+    } else if (!tenantId || !clientId) {
+      console.warn('Microsoft login is not configured: missing clientId or tenantId in auth-config.js');
+      setStatus('Microsoft-Login ist noch nicht konfiguriert. Bitte Client-ID und Tenant-ID prüfen.');
+    } else if (activeToken) {
       tokenInput.value = activeToken;
       setStatus('Token aus Redirect URL erkannt. Starte Analyse…');
       loadAndRender(activeToken);
     } else {
-      setStatus('Kein Redirect-Token gefunden. Bitte Token einfügen.');
+      setStatus('Kein Redirect-Token gefunden. Bitte mit Microsoft anmelden oder Token einfügen.');
     }
+
+    loginBtn.addEventListener('click', startLogin);
 
     loadBtn.addEventListener('click', () => {
       const token = tokenInput.value.trim();
@@ -196,17 +233,145 @@
       loadAndRender(token);
     });
 
-    function extractTokenFromUrl() {
+    function extractAuthStateFromUrl() {
+      const url = new URL(window.location.href);
       const hash = window.location.hash.startsWith('#') ? window.location.hash.slice(1) : window.location.hash;
       const hashParams = new URLSearchParams(hash);
-      const queryParams = new URLSearchParams(window.location.search);
-
-      return (
+      const queryParams = url.searchParams;
+      const returnedState = hashParams.get('state') || queryParams.get('state') || '';
+      const token = (
         hashParams.get('access_token') ||
         queryParams.get('access_token') ||
         queryParams.get('token') ||
         ''
       );
+      const expectedState = getStoredAuthState();
+      let error = extractAuthError(hashParams, queryParams);
+
+      if (token) {
+        if (!returnedState) {
+          error = 'Ungültige Login-Antwort ohne Statuswert. Bitte den Login erneut starten.';
+        } else if (!isValidReturnedAuthState(returnedState, expectedState)) {
+          error = 'Ungültiger Login-Status. Bitte den Login erneut starten.';
+        }
+      }
+
+      let cleanedUrl = '';
+      let shouldCleanUrl = false;
+      for (const name of authParamNames) {
+        if (queryParams.has(name)) {
+          queryParams.delete(name);
+          shouldCleanUrl = true;
+        }
+        if (hashParams.has(name)) {
+          shouldCleanUrl = true;
+        }
+      }
+
+      if (shouldCleanUrl) {
+        const cleaned = new URL(window.location.href);
+        cleaned.search = queryParams.toString() ? `?${queryParams.toString()}` : '';
+        cleaned.hash = '';
+        cleanedUrl = cleaned.toString();
+      }
+
+      const validatedToken = token && !error ? token : '';
+
+      return {
+        token: validatedToken,
+        error,
+        cleanedUrl
+      };
+    }
+
+    function extractAuthError(hashParams, queryParams) {
+      const errorCode = hashParams.get('error') || queryParams.get('error') || '';
+      const errorDescription = hashParams.get('error_description') || queryParams.get('error_description') || '';
+      if (errorCode && errorDescription) {
+        return `${errorCode}: ${errorDescription}`;
+      }
+      return errorCode || errorDescription || '';
+    }
+
+    function startLogin() {
+      if (!tenantId || !clientId) {
+        setStatus('Microsoft-Login ist noch nicht konfiguriert. Bitte Client-ID und Tenant-ID prüfen.');
+        return;
+      }
+      const state = createAuthState();
+      if (!state) {
+        setStatus('Microsoft-Login konnte nicht gestartet werden. Bitte einen aktuellen Browser verwenden oder den Token manuell einfügen.');
+        return;
+      }
+      if (!persistAuthState(state)) {
+        setStatus('Microsoft-Login konnte nicht gestartet werden, weil der Browser keinen sicheren Sitzungsspeicher bereitstellt. Bitte Browser-Einstellungen prüfen oder Token manuell einfügen.');
+        return;
+      }
+      window.location.assign(buildLoginUrl(state));
+    }
+
+    function buildLoginUrl(state) {
+      const redirectUrl = new URL(window.location.href);
+      redirectUrl.search = '';
+      redirectUrl.hash = '';
+      const params = new URLSearchParams({
+        client_id: clientId,
+        response_type: 'token',
+        redirect_uri: redirectUrl.toString(),
+        response_mode: 'fragment',
+        scope: authScopes.join(' '),
+        prompt: 'select_account',
+        state
+      });
+      return `${authEndpoint}?${params.toString()}`;
+    }
+
+    function createAuthState() {
+      if (window.crypto?.randomUUID) {
+        return window.crypto.randomUUID();
+      }
+      if (window.crypto?.getRandomValues) {
+        const bytes = new Uint8Array(16);
+        window.crypto.getRandomValues(bytes);
+        return Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
+      }
+      return '';
+    }
+
+    function persistAuthState(state) {
+      try {
+        window.sessionStorage.setItem(authStateStorageKey, state);
+        return true;
+      } catch {
+        return false;
+      }
+    }
+
+    function getStoredAuthState() {
+      try {
+        return window.sessionStorage.getItem(authStateStorageKey) || '';
+      } catch {
+        return '';
+      }
+    }
+
+    function isValidReturnedAuthState(returnedState, expectedState) {
+      if (!returnedState) {
+        return false;
+      }
+      if (!expectedState) {
+        return false;
+      }
+      if (expectedState !== returnedState) {
+        return false;
+      }
+
+      try {
+        window.sessionStorage.removeItem(authStateStorageKey);
+        return true;
+      } catch {
+        return false;
+      }
     }
 
     function setStatus(message) {
