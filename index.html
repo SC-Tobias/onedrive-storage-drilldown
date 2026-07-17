@@ -678,7 +678,7 @@
       }
       let total = 0;
       for (const child of node.children) {
-        if (child.type === 'folder' && child.children?.length) {
+        if (child.type === 'folder') {
           total += recomputeFolderSizes(child);
         } else {
           total += Number(child.size || 0);
@@ -791,10 +791,7 @@
         return;
       }
       node.loadingMore = true;
-      const countersBefore = {
-        folders: currentCounters.folders,
-        files: currentCounters.files
-      };
+      const countersBefore = { ...currentCounters };
       triggerBtn.disabled = true;
       loginBtn.disabled = true;
       startBtn.disabled = true;
