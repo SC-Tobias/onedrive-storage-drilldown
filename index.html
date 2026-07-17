@@ -150,6 +150,12 @@
       margin-bottom: 0.3rem;
     }
 
+    summary:focus-visible {
+      outline: 2px solid #2563eb;
+      outline-offset: 2px;
+      border-radius: 6px;
+    }
+
     summary::-webkit-details-marker {
       display: none;
     }
@@ -221,7 +227,7 @@
         <summary>Web-Konfiguration</summary>
         <div class="row">
           <label for="clientIdInput" class="input-label">Eigene Application (Client) ID:</label>
-          <input id="clientIdInput" type="text" placeholder="Wenn leer, wird die Standard-ID verwendet" />
+          <input id="clientIdInput" type="text" placeholder="Wenn leer, wird die Standard-ID verwendet" pattern="^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$" title="GUID-Format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" />
         </div>
         <p><strong>Benötigte API-Berechtigungen (delegated):</strong></p>
         <ul>
@@ -316,8 +322,11 @@
       configPanel.open = !configPanel.open;
       if (configPanel.open) {
         clientIdInput.focus();
+      } else {
+        configBtn.focus();
       }
     });
+    clientIdInput.addEventListener('input', validateClientIdOverride);
     clientIdInput.addEventListener('change', persistClientIdOverrideToStorage);
     maxDepthInput.addEventListener('change', persistMaxDepthToStorage);
 
@@ -383,6 +392,10 @@
 
     function startLogin() {
       const effectiveClientId = getEffectiveClientId();
+      if (!validateClientIdOverride()) {
+        setStatus('Die eigene Client-ID hat ein ungültiges Format. Erwartet wird eine GUID wie xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx.');
+        return;
+      }
       if (!tenantId || !effectiveClientId) {
         setStatus('Microsoft-Login ist noch nicht konfiguriert. Bitte Client-ID (Standard oder Override) und Tenant-ID prüfen.');
         return;
@@ -442,9 +455,21 @@
       try {
         const storedValue = window.localStorage.getItem(clientIdOverrideStorageKey) || '';
         clientIdInput.value = storedValue;
+        validateClientIdOverride();
       } catch {
         // Ignore unavailable storage and continue.
       }
+    }
+
+    function validateClientIdOverride() {
+      const value = clientIdInput.value.trim();
+      if (!value) {
+        clientIdInput.setCustomValidity('');
+        return true;
+      }
+      const isValid = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(value);
+      clientIdInput.setCustomValidity(isValid ? '' : 'Ungültige GUID.');
+      return isValid;
     }
 
     function createAuthState() {
